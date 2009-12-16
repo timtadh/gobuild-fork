@@ -1,0 +1,35 @@
+Compiling
+----------
+
+> 6g gobuild.go && 6l -o gobuild gobuild.6
+
+Replace 6 with whatever your architecture is (6 = AMD64, 8 = 386, 5 = arm).
+
+If you have an older version of gobuild, running gobuild
+without parameters inside the source code directory
+should be enough.
+
+
+
+Usage
+-----
+
+There are currently three different use cases for gobuild.
+
+1) One main function with one or more file in the main package:
+   
+   > gobuild
+
+2) Several main functions in different files with each file of
+   the main package belonging to a different executable:
+
+   > gobuild mainfile.go
+
+3) Several main functions in different files and some additional
+   files in the main package that are shared by some/all the
+   executables:
+
+   > gobuild --multiple-main mainfile.go
+
+Local imports will be compiled automatically. They should be placed
+inside directories that match their package name.
