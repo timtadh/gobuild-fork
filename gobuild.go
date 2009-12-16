@@ -28,11 +28,6 @@ var verboseMode *bool = flag.Bool("v", false, "print debug messages");
 
 // ========== constants ==========
 
-const (
-	UNKNOWN_PACKAGE = iota;
-	LOCAL_PACKAGE;
-	REMOTE_PACKAGE;
-)
 
 // ========== structs ==========
 
