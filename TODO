@@ -1,11 +1,7 @@
-
- - test with other applications
- - upload source
  - change root path if command line to main file is in a different (non-sub) directory
- - warning if package is not in directory with the package name
- - differ between packages with same name but different paths (error?)
  - support for external librarys (e.g. OpenGL/SDL or additional go libs without .go files)
  - library building
+ - differ between packages with same name but different paths (error?)
  - BUG: if package file is in 2 sub-dirs with wrong names, compilation will fail
  - (optional) colorize errors/warnings
  - exclude command line parameter -X (for files/filemasks/directories)
@@ -13,4 +9,3 @@
  - Makefile creator
  - --clean command line option (is this needed?)
  - support gccgo
- - -v parameter
