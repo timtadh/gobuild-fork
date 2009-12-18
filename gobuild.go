@@ -21,14 +21,16 @@ import (
 
 // ========== command line parameters ==========
 
-var buildAllTargets *bool = flag.Bool("a", false, "(not yet implemented) build all targets");
-var buildTesting *bool = flag.Bool("t", false, "(not yet implemented) Build all tests");
-var includeAllMain *bool = flag.Bool("multiple-main", false, "use all main package files without main function");
-var includeInvisible *bool = flag.Bool("include-hidden", false, "Include hidden directories");
+var flagLibrary *bool = flag.Bool("lib", false, "build all packages as librarys");
+var flagAllTargets *bool = flag.Bool("a", false, "(not yet implemented) build all targets");
+var flagTesting *bool = flag.Bool("t", false, "(not yet implemented) Build all tests");
+var flagAllMain *bool = flag.Bool("multiple-main", false, "use all main package files without main function");
+var flagIncludeInvisible *bool = flag.Bool("include-hidden", false, "Include hidden directories");
 var outputFileName *string = flag.String("o", "", "output file");
-var quietMode *bool = flag.Bool("q", false, "only print warnings/errors");
-var quieterMode *bool = flag.Bool("qq", false, "only print errors");
-var verboseMode *bool = flag.Bool("v", false, "print debug messages");
+var flagQuietMode *bool = flag.Bool("q", false, "only print warnings/errors");
+var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors");
+var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages");
+var flagIncludePaths *string = flag.String("I", "", "additional include paths");
 
 // ========== constants ==========
 
@@ -57,10 +59,12 @@ var goFileVector vector.Vector;
 var goPackageMap map[string] *goPackage;
 var compilerBin string;
 var linkerBin string;
+var gopackBin string = "gopack";
 var mainGoFileName string; // can also be a command line parameter
 var compileError bool = false;
 var linkError bool = false;
 var rootPath string;
+var objExt string;
 
 // ========== goFile methods ==========
 
@@ -80,7 +84,7 @@ func (this *goFile) parseFile() (err os.Error) {
 
 	// exclude the file if "main" package and non-include-all
 	if fileast.Name.String() == "main" &&
-		!*includeAllMain && this.filename != mainGoFileName {
+		!*flagAllMain && this.filename != mainGoFileName {
 		return;
 	}
 
@@ -154,20 +158,20 @@ type goFileVisitor struct {}
 // implementation of the Visitor interface for the file walker
 func (v *goFileVisitor) VisitDir(path string, d *os.Dir) bool {
 	if path[strings.LastIndex(path, "/") + 1] == '.' {
-		return *includeInvisible;
+		return *flagIncludeInvisible;
 	}
 	return true;
 }
 
 func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 	// parse hidden directories?
-	if (path[strings.LastIndex(path, "/") + 1] == '.') && (!*includeInvisible) {
+	if (path[strings.LastIndex(path, "/") + 1] == '.') && (!*flagIncludeInvisible) {
 		return;
 	}
 
 	if strings.HasSuffix(path, ".go") {
 		// include _test.go files?
-		if strings.HasSuffix(path, "_test.go") && (!*buildTesting) {
+		if strings.HasSuffix(path, "_test.go") && (!*flagTesting) {
 			return;
 		}
 
@@ -259,6 +263,9 @@ func readFiles(rootpath string) {
  starting with the main package.
 */
 func compile(pack *goPackage) {
+	var argv []string;
+	var argvFilled int;
+
 	// check for recursive dependencies
 	if pack.inProgress {
 		error("Found a recurisve dependency in %s. This is not supported in Go, aborting compilation.\n", pack.name);
@@ -282,36 +289,35 @@ func compile(pack *goPackage) {
 	
 	// construct compiler command line arguments
 	info("Compiling %s...\n", pack.name);
-	argv := make([]string, pack.files.Len() + 3);
+	if *flagIncludePaths != "" {
+		argv = make([]string, pack.files.Len() + 5);
+	} else {
+		argv = make([]string, pack.files.Len() + 3);
+	}
 
-	argv[0] = compilerBin;
+	argv[argvFilled] = compilerBin; argvFilled++;
+	argv[argvFilled] = "-o"; argvFilled++;
+	argv[argvFilled] = pack.name + objExt; argvFilled++;
 
-	argv[1] = "-o";
-
-	switch os.Getenv("GOARCH") {
-	case "amd64":
-		argv[2] = pack.name + ".6";
-	case "386":
-		argv[2] = pack.name + ".8";
-	case "arm":
-		argv[2] = pack.name + ".5";
+	if *flagIncludePaths != "" {
+		argv[argvFilled] = "-I"; argvFilled++;
+		argv[argvFilled] = *flagIncludePaths; argvFilled++;
 	}
 
 	info("\tfiles: ");
-	var j int = 3;
 	for i := 0; i < pack.files.Len(); i++  {
 		// "main" package is a special case, only include one file with main function
 		gf := pack.files.At(i).(*goFile);
 		if pack.name != "main" ||
 			!gf.hasMain || gf.filename == mainGoFileName {
-			argv[j] = gf.filename;
-			info("%s ", argv[j]);
-			j++;
+			argv[argvFilled] = gf.filename;
+			info("%s ", argv[argvFilled]);
+			argvFilled++;
 		}
 	}
 	info("\n");
 		
-	cmd, err := exec.Run(compilerBin, argv[0:j], os.Environ(), exec.DevNull, 
+	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), exec.DevNull, 
 		exec.PassThrough, exec.PassThrough);
 	if err != nil {
 		error("%s\n", err);
@@ -336,24 +342,14 @@ func compile(pack *goPackage) {
 }
 
 /*
- Calls the linker for the main file, which should be called "main.*".
+ Calls the linker for the main file, which should be called "main.(5|6|8)".
 */
 func link() {
 	argv := []string{
 		linkerBin,
 		"-o",
 		mainGoFileName[0:len(mainGoFileName)-3],
-		""};
-
-	switch os.Getenv("GOARCH") {
-	case "amd64":
-		argv[3] = "main.6";
-	case "386":
-		argv[3] = "main.8";
-	case "arm":
-		argv[3] = "main.5";
-	}
-	
+		"main" + objExt};	
 
 	// replace default output file name with command line parameter -o
 	if *outputFileName != "" {
@@ -378,12 +374,112 @@ func link() {
 	}
 }
 
+func packLib(pack *goPackage) {
+
+	info("Creating %s.a...\n", pack.name);
+
+	argv := []string{
+		gopackBin,
+		"crg", // create new go archive
+		pack.name + ".a",
+		pack.name + objExt};
+
+	cmd, err := exec.Run(gopackBin, argv, os.Environ(), exec.DevNull, exec.PassThrough, exec.PassThrough);
+	if err != nil {
+		error("%s\n", err);
+		os.Exit(1);
+	}
+	waitmsg, err := cmd.Wait(0);
+	if err != nil {
+		error("gopack execution error (%s), aborting.\n", err);
+		os.Exit(1);
+	}
+
+	if waitmsg.ExitStatus() != 0 {
+		error("gopack returned with errors, aborting.\n");
+		os.Exit(1);
+	}
+
+}
+
+/*
+ Build an executable from the given sources.
+*/
+func buildExecutable() {
+	// check if there's a main package:
+	mainPack, mainExists := goPackageMap["main"];
+	if !mainExists {
+		error("No main package found.\n");
+		os.Exit(1);
+	}
+	
+	// find the main function (if not specified in the command line)
+	if mainGoFileName == "" {
+		multiFound := false;
+		mainPack.files.Do(func(e interface{}){
+			gf := e.(*goFile);
+			if gf.hasMain {
+				if mainGoFileName == "" && !multiFound {
+					mainGoFileName = gf.filename;
+				} else if !multiFound {
+					error("multiple files with main methods found.\n");
+					errorContinue("Please specify one of the following as command line parameter:\n");
+					errorContinue("\t %s\n", mainGoFileName);
+					errorContinue("\t %s\n", gf.filename);
+					multiFound = true;
+				} else {
+					errorContinue("\t %s\n", gf.filename);
+				}
+			}
+		});
+		if multiFound {
+			os.Exit(1);
+		}
+	}
+	
+	// compile all needed packages
+	compile(mainPack);
+	
+	// link everything together
+	if !compileError {
+		link();
+	} else {
+		error("Can't link executable because of compile errors.\n");
+	}
+
+}
+
+
+/*
+ Build library files (.a) for all packages or the ones given though
+ command line parameters.
+*/
+func buildLibrary() {
+
+	// check for parameters
+
+	// loop over all packages, compile them and build a .a file
+	for _, pack := range goPackageMap {
+
+		if pack.name == "main" {
+			continue; // don't make this into a library
+		}
+
+		debug("Building %s...\n", pack.name);
+		if !pack.compiled {
+			compile(pack);
+			packLib(pack);
+		}
+	}
+
+}
+
 
 /*
  Prints debug messages. Same syntax as fmt.Printf.
 */
 func debug(format string, v ...) {
-	if *verboseMode && !*quietMode && !*quieterMode {
+	if *flagVerboseMode && !*flagQuietMode && !*flagQuieterMode {
 		fmt.Printf("DEBUG: ");
 		fmt.Printf(format, v);
 	}
@@ -394,7 +490,7 @@ func debug(format string, v ...) {
  Same syntax as fmt.Printf.
 */
 func debugContinue(format string, v ...) {
-	if *verboseMode && !*quietMode && !*quieterMode {
+	if *flagVerboseMode && !*flagQuietMode && !*flagQuieterMode {
 		fmt.Printf("       ");
 		fmt.Printf(format, v);
 	}
@@ -405,7 +501,7 @@ func debugContinue(format string, v ...) {
  gobuild is currently doing. Same syntax as fmt.Printf.
 */
 func info(format string, v ...) {
-	if !*quietMode && !*quieterMode {
+	if !*flagQuietMode && !*flagQuieterMode {
 		//fmt.Print("INFO: ");
 		fmt.Printf(format, v);
 	}
@@ -416,7 +512,7 @@ func info(format string, v ...) {
  Prints a warning if warnings are enabled. Same syntax as fmt.Printf.
 */
 func warn(format string, v ...) {
-	if !*quieterMode {
+	if !*flagQuieterMode {
 		fmt.Print("WARNING: ");
 		fmt.Printf(format, v);
 	}
@@ -427,7 +523,7 @@ func warn(format string, v ...) {
  Same syntax as fmt.Printf.
 */
 func warnContinue(format string, v ...) {
-	if !*quieterMode {
+	if !*flagQuieterMode {
 		fmt.Print("         ");
 		fmt.Printf(format, v);
 	}
@@ -475,7 +571,7 @@ func main() {
 		}
 		f.Close();
 	} else {
-		*includeAllMain = true;
+		*flagAllMain = true;
 	}
 
 	// get the compiler/linker executable
@@ -483,12 +579,15 @@ func main() {
 	case "amd64":
 		compilerBin = "6g";
 		linkerBin = "6l";
+		objExt = ".6";
 	case "386":
 		compilerBin = "8g";
 		linkerBin = "8l";
+		objExt = ".8";
 	case "arm":
 		compilerBin = "5g";
 		linkerBin = "5l";
+		objExt = ".5";
 	default:
 		error("Please specify a valid GOARCH (amd64/386/arm).\n");
 		os.Exit(1);		
@@ -497,12 +596,17 @@ func main() {
 	// get the complete path to the compiler/linker
 	compilerBin, err = exec.LookPath(compilerBin);
 	if err != nil {
-		error("Error: could not find compiler %s.\n", compilerBin);
+		error("Could not find compiler %s: %s\n", compilerBin, err);
 		os.Exit(1);
 	}
 	linkerBin, err = exec.LookPath(linkerBin);
 	if err != nil {
-		error("Error: could not find linker %s.\n", linkerBin);
+		error("Could not find linker %s: %s\n", linkerBin, err);
+		os.Exit(1);
+	}
+	gopackBin, err = exec.LookPath(gopackBin);
+	if err != nil {
+		error("Could not find gopack executable (%s): %s\n", gopackBin, err);
 		os.Exit(1);
 	}
 	
@@ -519,44 +623,9 @@ func main() {
 	// read all go files in the current path + subdirectories and parse them
 	readFiles(rootPath);
 
-	// check if there's a main package:
-	mainPack, mainExists := goPackageMap["main"];
-	if !mainExists {
-		error("No main package found.\n");
-		os.Exit(1);
-	}
-	
-	// find the main function (if not specified in the command line)
-	if mainGoFileName == "" {
-		multiFound := false;
-		mainPack.files.Do(func(e interface{}){
-			gf := e.(*goFile);
-			if gf.hasMain {
-				if mainGoFileName == "" && !multiFound {
-					mainGoFileName = gf.filename;
-				} else if !multiFound {
-					error("multiple files with main methods found.\n");
-					errorContinue("Please specify one of the following as command line parameter:\n");
-					errorContinue("\t %s\n", mainGoFileName);
-					errorContinue("\t %s\n", gf.filename);
-					multiFound = true;
-				} else {
-					errorContinue("\t %s\n", gf.filename);
-				}
-			}
-		});
-		if multiFound {
-			os.Exit(1);
-		}
-	}
-
-	// compile all needed packages
-	compile(mainPack);
-
-	// link everything together
-	if !compileError {
-		link();
+	if *flagLibrary {
+		buildLibrary();
 	} else {
-		error("Can't link executable because of compile errors.\n");
+		buildExecutable();
 	}
 }

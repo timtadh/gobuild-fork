@@ -1,9 +1,9 @@
  - build >1 target with command line arguments or -a switch
+ - command line options (package and -o dir) for librarys
  - local imports without "./" (seems to be really common)
  - change root path if command line to main file is in a different (non-sub) directory
  - support for external librarys (e.g. OpenGL/SDL or additional go libs without .go files?)
  - testing (-t)
- - library building (-> gopack)
  - differ between packages with same name but different paths (error?)
  - BUG: if package file is in 2 sub-dirs with wrong names, compilation fails
  - (optional) colorize errors/warnings
