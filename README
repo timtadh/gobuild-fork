@@ -1,3 +1,11 @@
+Description
+------------
+gobuild is an automatic build tool that aims to replace Makefiles for simple
+projects written in the Go programming language. It creates a dependency graph
+of all local imports and compiles them in the right order using the gc Go
+compiler.
+
+
 Compiling
 ----------
 
@@ -5,14 +13,12 @@ Compiling
 
 Replace 6 with whatever your architecture is (6 = AMD64, 8 = 386, 5 = arm).
 
-If you have an older version of gobuild, running gobuild
-without parameters inside the source code directory
-should be enough.
-
+If you have an older version of gobuild, running gobuild without parameters
+inside the source code directory should be enough.
 
 
 Usage
------
+------
 
 There are currently three different use cases for gobuild.
 
@@ -20,16 +26,44 @@ There are currently three different use cases for gobuild.
    
    > gobuild
 
-2) Several main functions in different files with each file of
-   the main package belonging to a different executable:
+2) Several main functions in different files with each file of the main
+   package belonging to a different executable:
 
    > gobuild mainfile.go
 
-3) Several main functions in different files and some additional
-   files in the main package that are shared by some/all the
-   executables:
+3) Several main functions in different files and some additional files in the
+   main package that are shared by some/all the executables:
 
    > gobuild --multiple-main mainfile.go
 
-Local imports will be compiled automatically. They should be placed
-inside directories that match their package name.
+For gobuild to work correctly you have to import all local packages with their
+path, e.g. import "./mypackage";. All files for this package should be placed
+inside a directory called "mypackage", but it also works if they are in the
+root directory. For packages with a deeper directory structure the correct path
+is required though.
+
+
+Parameters
+-----------
+
+> gobuild [options] [gofile]
+
+ gofile
+        For building an executable this file must have a main function inside.
+
+ -o filename
+        If compiling an executable it will be written to this file. Without
+        this parameter the executable will have the same name as the go-file
+        with the main function, excluding the file extension.
+
+ -q
+        Quiet mode, only print warnings and errors.
+ -qq
+        Quieter mode, only print errors.
+ -v
+        Verbose mode, print debug messages.
+ -multiple-main
+        Include other files to the main package if they don't have a main
+        function. This can include files that are not required.
+ -include-hidden
+        Include files in hidden directories and hidden files.
