@@ -98,9 +98,8 @@ func (this *goFile) parseFile() (err os.Error) {
 		default: // >1 sub-directories
 			if this.filename[max(strings.LastIndex(this.filename, "/") - len(fileast.Name.String()), 0):strings.LastIndex(this.filename, "/")] != fileast.Name.String() {
 
-				// TODO: print correct path here too.
-				// TODO: this case will result in a link-error (exit with error here?)
-				warn("2: File %s from package %s is not in the expected directory.\n",
+				// NOTE: this case will result in a link-error (exit with error here?)
+				warn("File %s from package %s is not in the expected directory.\n",
 					this.filename, fileast.Name.String());
 			}
 			packageName = strings.Join([]string{
@@ -377,12 +376,22 @@ func link() {
 
 
 /*
- Prints debug messages.
- Same syntax as fmt.Printf.
+ Prints debug messages. Same syntax as fmt.Printf.
 */
 func debug(format string, v ...) {
 	if *verboseMode && !*quietMode && !*quieterMode {
 		fmt.Printf("DEBUG: ");
+		fmt.Printf(format, v);
+	}
+}
+
+/*
+ Prints a debug message if enabled but without the "DEBUG: " prefix.
+ Same syntax as fmt.Printf.
+*/
+func debugContinue(format string, v ...) {
+	if *verboseMode && !*quietMode && !*quieterMode {
+		fmt.Printf("       ");
 		fmt.Printf(format, v);
 	}
 }
@@ -410,6 +419,17 @@ func warn(format string, v ...) {
 }
 
 /*
+ Prints a warning message if enabled but without the "WARNING: " prefix.
+ Same syntax as fmt.Printf.
+*/
+func warnContinue(format string, v ...) {
+	if !*quieterMode {
+		fmt.Print("         ");
+		fmt.Printf(format, v);
+	}
+}
+
+/*
  Prints an error message. Same syntax as fmt.Printf.
 */
 func error(format string, v ...) {
@@ -417,6 +437,16 @@ func error(format string, v ...) {
 	fmt.Fprintf(os.Stderr, format, v);
 }
 
+/*
+ Prints an error message but without the "ERROR: " prefix.
+ Same syntax as fmt.Printf.
+*/
+func errorContinue(format string, v ...) {
+	fmt.Fprint(os.Stderr, "       ");
+	fmt.Fprintf(os.Stderr, format, v);
+}
+
+// Returns the bigger number.
 func max(a, b int) int {
 	if a > b {
 		return a;
@@ -431,7 +461,6 @@ func main() {
 	flag.Parse();
 	
 	// check if there's a main file parameter on the command line
-	// TODO: support for more than one file
 	if flag.NArg() > 0 {
 		mainGoFileName = flag.Arg(0);
 		// and if the file actually exists
@@ -503,12 +532,12 @@ func main() {
 					mainGoFileName = gf.filename;
 				} else if !multiFound {
 					error("multiple files with main methods found.\n");
-					error("Please specify one of the following as command line parameter:\n");
-					error("\t%s\n", mainGoFileName);
-					error("\t%s\n", gf.filename);
+					errorContinue("Please specify one of the following as command line parameter:\n");
+					errorContinue("\t %s\n", mainGoFileName);
+					errorContinue("\t %s\n", gf.filename);
 					multiFound = true;
 				} else {
-					error("\t%s\n", gf.filename);
+					errorContinue("\t %s\n", gf.filename);
 				}
 			}
 		});
