@@ -83,8 +83,10 @@ func (this *goFile) parseFile() (err os.Error) {
 	}
 
 	// exclude the file if "main" package and non-include-all
+	// also exclude "main" if building a library
 	if fileast.Name.String() == "main" &&
-		!*flagAllMain && this.filename != mainGoFileName {
+		((!*flagAllMain && this.filename != mainGoFileName) ||
+		*flagLibrary) {
 		return;
 	}
 
@@ -456,7 +458,13 @@ func buildExecutable() {
 */
 func buildLibrary() {
 
-	// check for parameters
+	// TODO: check for parameters
+
+	if len(goPackageMap) == 0 {
+		warn("No packages found to build.\n");
+		return;
+	}
+
 
 	// loop over all packages, compile them and build a .a file
 	for _, pack := range goPackageMap {
@@ -465,8 +473,14 @@ func buildLibrary() {
 			continue; // don't make this into a library
 		}
 
-		debug("Building %s...\n", pack.name);
+		// these packages come from invalid/unhandled imports
+		if pack.files.Len() == 0 {
+			debug("Skipping package %s, no files to compile.\n", pack.name);
+			continue;
+		}
+
 		if !pack.compiled {
+			debug("Building %s...\n", pack.name);
 			compile(pack);
 			packLib(pack);
 		}
