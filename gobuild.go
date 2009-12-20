@@ -50,7 +50,8 @@ type goFile struct {
 	filename string;         // file name with full path
 	content []byte;          // file content
 	pack *goPackage;         // the package this file belongs to
-	hasMain bool;
+	hasMain bool;            // main function found (only true for main package)
+	isCGOFile bool;          // imports "C"
 }
 
 // ========== global (package) variables ==========
@@ -177,7 +178,7 @@ func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 			return;
 		}
 
-		gf := goFile{path[len(rootPath)+1:len(path)], nil, nil, false};
+		gf := goFile{path[len(rootPath)+1:len(path)], nil, nil, false, false};
 		gf.parseFile();
 		goFileVector.Push(&gf);
 	}
@@ -209,6 +210,10 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 					dep = newGoPackage(packName);
 				}
 				v.file.pack.depends.Push(dep);
+			}
+			
+			if string(bl.Value) == "\"C\"" {
+				v.file.isCGOFile = true;
 			}
 
 		}
@@ -347,11 +352,28 @@ func compile(pack *goPackage) {
  Calls the linker for the main file, which should be called "main.(5|6|8)".
 */
 func link() {
-	argv := []string{
-		linkerBin,
-		"-o",
-		mainGoFileName[0:len(mainGoFileName)-3],
-		"main" + objExt};	
+	var argv []string;
+
+	if *flagIncludePaths != "" {
+		argv = make([]string, 6);
+		argv = []string{
+			linkerBin,
+			"-o",
+			mainGoFileName[0:len(mainGoFileName)-3],
+			"-L",
+			*flagIncludePaths,
+			"main" + objExt};
+		
+	} else {
+		argv = make([]string, 4);
+		argv = []string{
+			linkerBin,
+			"-o",
+			mainGoFileName[0:len(mainGoFileName)-3],
+			"main" + objExt};
+
+	}
+
 
 	// replace default output file name with command line parameter -o
 	if *outputFileName != "" {
