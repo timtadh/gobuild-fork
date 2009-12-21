@@ -46,24 +46,40 @@ is required though.
 Parameters
 -----------
 
-> gobuild [options] [gofile]
+> gobuild [options] [gofile(s)]
 
- gofile
-        For building an executable this file must have a main function inside.
+ gofile(s)
+        For building an executable you can give one or more go-file names
+        that must have a main function inside. The resulting executable will
+        be called after the filename, but without extension.
+        This parameter is optional if there's only one main file or the
+        parameter -a is given.
 
+ -a
+        Build all executables.
+
+ -include-hidden
+        Include files in hidden directories and hidden files.
+
+ -lib
+        Build all packages, excluding the main package, into library files.
+       
  -o filename
         If compiling an executable it will be written to this file. Without
         this parameter the executable will have the same name as the go-file
-        with the main function, excluding the file extension.
-
+        with the main function, excluding the file extension. If multiple
+        files with main function exist, this parameter will be ignored.
+ 
  -q
         Quiet mode, only print warnings and errors.
+
  -qq
         Quieter mode, only print errors.
+
+ -single-main
+        Don't include files from the main package without main function to
+        the one with main function when compiling.
+
  -v
         Verbose mode, print debug messages.
- -multiple-main
-        Include other files to the main package if they don't have a main
-        function. This can include files that are not required.
- -include-hidden
-        Include files in hidden directories and hidden files.
+

@@ -1,6 +1,7 @@
- - build >1 target with command line arguments or -a switch
- - command line options (package and -o dir) for librarys
+ - command line options (package) for librarys
+ - command line -o could be a path without filename, or path+filename
  - local imports without "./" (seems to be really common)
+ - Makefile for initial build + installing into $GOBIN
  - change root path if command line to main file is in a different (non-sub) directory
  - split gobuild.go into several files
  - support for external librarys (run cgo and figure out include paths? might need gobuild.hint first)

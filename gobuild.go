@@ -22,11 +22,11 @@ import (
 // ========== command line parameters ==========
 
 var flagLibrary *bool = flag.Bool("lib", false, "build all packages as librarys");
-var flagAllTargets *bool = flag.Bool("a", false, "(not yet implemented) build all targets");
+var flagBuildAll *bool = flag.Bool("a", false, "build all executables");
 var flagTesting *bool = flag.Bool("t", false, "(not yet implemented) Build all tests");
-var flagAllMain *bool = flag.Bool("multiple-main", false, "use all main package files without main function");
+var flagSingleMainFile *bool = flag.Bool("single-main", false, "one main file per executable");
 var flagIncludeInvisible *bool = flag.Bool("include-hidden", false, "Include hidden directories");
-var outputFileName *string = flag.String("o", "", "output file");
+var flagOutputFileName *string = flag.String("o", "", "output file");
 var flagQuietMode *bool = flag.Bool("q", false, "only print warnings/errors");
 var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors");
 var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages");
@@ -44,6 +44,7 @@ type goPackage struct {
 	compiled bool;           // true = finished compiling
 	inProgress bool;         // true = currently trying to compile dependencies (needed to find recursive dependencies)
 	hasErrors bool;          // true = compiler returned an error
+	outputFile string;       // filename (and maybe path) of the output files without extensions
 }
 
 type goFile struct {
@@ -58,6 +59,7 @@ type goFile struct {
 
 var goFileVector vector.Vector;
 var goPackageMap map[string] *goPackage;
+var goMainMap map[string] *goPackage;    // map with only the main function files (one per entry)
 var compilerBin string;
 var linkerBin string;
 var gopackBin string = "gopack";
@@ -78,58 +80,81 @@ func (this *goFile) parseFile() (err os.Error) {
 	var packageName string;
 
 	fileast, err = parser.ParseFile(this.filename, nil, 0);
+	packageName = fileast.Name.String();
 
 	if err != nil {
 		warn("Parsing file %s returned with errors: %s\n", this.filename, err);
 	}
 
-	// exclude the file if "main" package and non-include-all
-	// also exclude "main" if building a library
-	if fileast.Name.String() == "main" &&
-		((!*flagAllMain && this.filename != mainGoFileName) ||
-		*flagLibrary) {
-		return;
+	// ignore main package files if building a library
+	if *flagLibrary && packageName == "main" {
+		return
 	}
 
 	// check if package is in the correct path
-	packageName = fileast.Name.String();
-	if fileast.Name.String() != "main" {
+	if packageName != "main" {
 		switch strings.Count(this.filename, "/") {
 		case 0: // no sub-directory
 			warn("File %s from package %s is not in the correct path. Should be %s.\n",
 				this.filename, fileast.Name, 
-				strings.Join([]string{fileast.Name.String(), this.filename}, "/"));
+				strings.Join([]string{packageName, this.filename}, "/"));
 		case 1: // one sub-directory
-			if this.filename[0:strings.Index(this.filename, "/")] != fileast.Name.String() {
+			if this.filename[0:strings.Index(this.filename, "/")] != packageName {
 				warn("File %s from package %s is not in the correct directory. Should be %s.\n",
-					this.filename, fileast.Name.String(),
-					strings.Join([]string{fileast.Name.String(),
+					this.filename, packageName,
+					strings.Join([]string{packageName,
 					this.filename[strings.Index(this.filename, "/")+1:len(this.filename)]}, "/"));
 			}
 		default: // >1 sub-directories
-			if this.filename[max(strings.LastIndex(this.filename, "/") - len(fileast.Name.String()), 0):strings.LastIndex(this.filename, "/")] != fileast.Name.String() {
+			if this.filename[max(strings.LastIndex(this.filename, "/") - len(packageName), 0):strings.LastIndex(this.filename, "/")] != packageName {
 
 				// NOTE: this case will result in a link-error (exit with error here?)
 				warn("File %s from package %s is not in the expected directory.\n",
-					this.filename, fileast.Name.String());
+					this.filename, packageName);
 			}
 			packageName = strings.Join([]string{
 				this.filename[0:strings.LastIndex(this.filename[0:strings.LastIndex(this.filename, "/")], "/")],
-				fileast.Name.String()}, "/");
+				packageName}, "/");
 		}
-	}	
-
-	// check if package is already known
-	this.pack, exists = goPackageMap[packageName];
-	if !exists {
-		// create it if it's unknown
-		this.pack = newGoPackage(packageName);
 	}
-	this.pack.files.Push(this);
+
+
+	if packageName != "main" {
+		// check if package is already known
+		this.pack, exists = goPackageMap[packageName];
+		if !exists {
+			// create new goPackage if it's unknown
+			this.pack = newGoPackage(packageName);
+			goPackageMap[this.pack.name] = this.pack;
+		}
+	} else {
+		// main package will be stored in a new temporary package
+		this.pack = newGoPackage(packageName);		
+	}
 
 	// find the local imports in this file
+	// main package files will also be scanned for 
 	visitor := astVisitor{this};
 	ast.Walk(visitor, fileast);
+
+	this.pack.files.Push(this);
+	
+	if this.hasMain && packageName == "main" {
+		// main package + main function -> don't add to package list but to
+		// goMainMap instead
+		goMainMap[this.filename] = this.pack;
+		this.pack.outputFile = this.filename[0:len(this.filename)-3];
+	} else if packageName == "main" {
+		// main package + no main function -> combine with existing main
+		// package or create a new one
+		mainPack, exists := goPackageMap[packageName];
+		if !exists {
+			mainPack = newGoPackage("main");
+			goPackageMap["main"] = mainPack;
+		}
+		mainPack.append(this.pack);
+		this.pack = mainPack;
+	}
 	
 	return;
 }
@@ -148,8 +173,44 @@ func newGoPackage(name string) *goPackage {
 	pack.name = name;
 	pack.files = new(vector.Vector);
 	pack.depends = new(vector.Vector);
-	goPackageMap[pack.name] = pack;
+	pack.outputFile = name;
+	
 	return pack;
+}
+
+/*
+ Creates a clone of a package. Entries in files and depends are the same but with new vectors.
+*/
+func (this *goPackage) clone() *goPackage {
+	pack := new(goPackage);
+	pack.compiled = this.compiled;
+	pack.inProgress = this.inProgress;
+	pack.hasErrors = this.hasErrors;
+	pack.name = this.name;
+	pack.files = new(vector.Vector);
+	this.files.Do(func(gf interface{}) {
+		pack.files.Push(gf.(*goFile));
+	});
+	pack.depends = new(vector.Vector);
+	this.depends.Do(func(dep interface{}) {
+		pack.depends.Push(dep.(*goPackage));
+	});
+	pack.outputFile = this.outputFile;
+
+	return pack;
+}
+
+/*
+ Append a different package to this package. Will add dependencies and files, but
+ keep all other things as they are.
+*/
+func (this *goPackage) append(pack *goPackage) {
+	pack.files.Do(func(gf interface{}) {
+		this.files.Push(gf.(*goFile));
+	});
+	pack.depends.Do(func(dep interface{}) {
+		this.depends.Push(dep.(*goPackage));
+	});
 }
 
 // ========== goFileVisitor ==========
@@ -208,6 +269,7 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 				dep, exists := goPackageMap[packName]; 
 				if !exists {
 					dep = newGoPackage(packName);
+					goPackageMap[dep.name] = dep;
 				}
 				v.file.pack.depends.Push(dep);
 			}
@@ -292,10 +354,20 @@ func compile(pack *goPackage) {
 	if pack.files.Len() == 0 {
 		error("No files found for package %s.\n", pack.name);
 		os.Exit(1);
+	} else {
+		pack.files.Do(func(e interface{}) {
+			gf := e.(*goFile);
+			fmt.Printf("%s ", gf.filename);
+		});
+		fmt.Println();
 	}
 	
 	// construct compiler command line arguments
-	info("Compiling %s...\n", pack.name);
+	if (pack.name != "main") {
+		info("Compiling %s...\n", pack.name);
+	} else {
+		info("Compiling %s (%s)...\n", pack.name, pack.outputFile);
+	}
 	if *flagIncludePaths != "" {
 		argv = make([]string, pack.files.Len() + 5);
 	} else {
@@ -313,14 +385,10 @@ func compile(pack *goPackage) {
 
 	info("\tfiles: ");
 	for i := 0; i < pack.files.Len(); i++  {
-		// "main" package is a special case, only include one file with main function
 		gf := pack.files.At(i).(*goFile);
-		if pack.name != "main" ||
-			!gf.hasMain || gf.filename == mainGoFileName {
-			argv[argvFilled] = gf.filename;
-			info("%s ", argv[argvFilled]);
-			argvFilled++;
-		}
+		argv[argvFilled] = gf.filename;
+		info("%s ", argv[argvFilled]);
+		argvFilled++;
 	}
 	info("\n");
 		
@@ -351,7 +419,7 @@ func compile(pack *goPackage) {
 /*
  Calls the linker for the main file, which should be called "main.(5|6|8)".
 */
-func link() {
+func link(pack *goPackage) {
 	var argv []string;
 
 	if *flagIncludePaths != "" {
@@ -359,7 +427,7 @@ func link() {
 		argv = []string{
 			linkerBin,
 			"-o",
-			mainGoFileName[0:len(mainGoFileName)-3],
+			pack.outputFile,
 			"-L",
 			*flagIncludePaths,
 			"main" + objExt};
@@ -369,20 +437,25 @@ func link() {
 		argv = []string{
 			linkerBin,
 			"-o",
-			mainGoFileName[0:len(mainGoFileName)-3],
+			pack.outputFile,
 			"main" + objExt};
 
 	}
-
-
-	// replace default output file name with command line parameter -o
-	if *outputFileName != "" {
-		argv[2] = *outputFileName;
+	
+	// possible output file modification with -o options
+	if *flagOutputFileName != "" {
+		if flag.NArg() > 1 || (len(goMainMap) > 1 && *flagBuildAll) {
+			warn("Output file name ignored, can't build multiple targets into a single file.\n");
+		} else {
+			argv[2] = *flagOutputFileName;
+		}	
 	}
+
 
 	info("Linking %s...\n", argv[2]);
 
-	cmd, err := exec.Run(linkerBin, argv, os.Environ(), exec.DevNull, exec.PassThrough, exec.PassThrough);
+	cmd, err := exec.Run(linkerBin, argv, os.Environ(),
+		exec.DevNull, exec.PassThrough, exec.PassThrough);
 	if err != nil {
 		error("%s\n", err);
 		os.Exit(1);
@@ -394,7 +467,8 @@ func link() {
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		linkError = true;
+		error("Linker returned with errors, aborting.\n");
+		os.Exit(1);
 	}
 }
 
@@ -408,7 +482,8 @@ func packLib(pack *goPackage) {
 		pack.name + ".a",
 		pack.name + objExt};
 
-	cmd, err := exec.Run(gopackBin, argv, os.Environ(), exec.DevNull, exec.PassThrough, exec.PassThrough);
+	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
+		exec.DevNull, exec.PassThrough, exec.PassThrough);
 	if err != nil {
 		error("%s\n", err);
 		os.Exit(1);
@@ -431,45 +506,66 @@ func packLib(pack *goPackage) {
 */
 func buildExecutable() {
 	// check if there's a main package:
-	mainPack, mainExists := goPackageMap["main"];
-	if !mainExists {
+	if len(goMainMap) == 0 {
 		error("No main package found.\n");
 		os.Exit(1);
 	}
-	
-	// find the main function (if not specified in the command line)
-	if mainGoFileName == "" {
-		multiFound := false;
-		mainPack.files.Do(func(e interface{}){
-			gf := e.(*goFile);
-			if gf.hasMain {
-				if mainGoFileName == "" && !multiFound {
-					mainGoFileName = gf.filename;
-				} else if !multiFound {
-					error("multiple files with main methods found.\n");
-					errorContinue("Please specify one of the following as command line parameter:\n");
-					errorContinue("\t %s\n", mainGoFileName);
-					errorContinue("\t %s\n", gf.filename);
-					multiFound = true;
-				} else {
-					errorContinue("\t %s\n", gf.filename);
-				}
-			}
-		});
-		if multiFound {
-			os.Exit(1);
+
+	// multiple main, no command file from command line and no -a -> error
+	if (len(goMainMap) > 1) && (flag.NArg() == 0) && !*flagBuildAll {
+		error("Multiple files found with main function.\n");
+		errorContinue("Please specify one or more as command line parameter or\n");
+		errorContinue("run gobuild with -a. Available main files are:\n");
+		for fn, _ := range goMainMap {
+			errorContinue("\t %s\n", fn);
 		}
+		os.Exit(1);
 	}
 	
 	// compile all needed packages
-	compile(mainPack);
-	
-	// link everything together
-	if !compileError {
-		link();
+	if flag.NArg() > 0 {
+		for _, fn := range flag.Args() {
+			mainPack, exists := goMainMap[fn];
+			if !exists {
+				error("File %s not found.\n", fn);
+				return; // or os.Exit?
+			}
+			
+			if !*flagSingleMainFile {
+				pack, exists := goPackageMap["main"];
+				if exists {
+					mainPack.append(pack);
+				}
+			}
+			compile(mainPack);
+
+			// link everything together
+			if !compileError {
+				link(mainPack);
+			} else {
+				error("Can't link executable because of compile errors.\n");
+			}
+		}
 	} else {
-		error("Can't link executable because of compile errors.\n");
+		for _, mainPack := range goMainMap {
+
+			if !*flagSingleMainFile {
+				pack, exists := goPackageMap["main"];
+				if exists {
+					mainPack.append(pack);
+				}
+			}
+			compile(mainPack);
+
+			// link everything together
+			if !compileError {
+				link(mainPack);
+			} else {
+				error("Can't link executable because of compile errors.\n");
+			}
+		}
 	}
+	
 
 }
 
@@ -596,20 +692,6 @@ func main() {
 	// parse command line arguments
 	flag.Parse();
 	
-	// check if there's a main file parameter on the command line
-	if flag.NArg() > 0 {
-		mainGoFileName = flag.Arg(0);
-		// and if the file actually exists
-		f, err := os.Open(mainGoFileName, os.O_RDONLY, 0);
-		if err != nil {
-			error("Failed to read %s: %s\n", mainGoFileName, err);
-			os.Exit(1);
-		}
-		f.Close();
-	} else {
-		*flagAllMain = true;
-	}
-
 	// get the compiler/linker executable
 	switch os.Getenv("GOARCH") {
 	case "amd64":
@@ -653,8 +735,9 @@ func main() {
 		os.Exit(1);
 	}
 
-	// create the package map
+	// create the package & main map
 	goPackageMap = make(map[string] *goPackage);
+	goMainMap = make(map[string] *goPackage);
 
 	// read all go files in the current path + subdirectories and parse them
 	readFiles(rootPath);
