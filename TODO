@@ -1,4 +1,3 @@
- - command line options (package) for librarys
  - command line -o could be a path without filename, or path+filename
  - local imports without "./" (seems to be really common)
  - Makefile for initial build + installing into $GOBIN
@@ -13,5 +12,6 @@
  - automatic build repair (react on some compile/link errors)
  - gobuild.hint file
  - (optional) Makefile creator
- - --clean command line option (is this needed?)
+ - make the -clean option safer (error if wrong permissions, no .go files, etc.)
  - support gccgo
+ - Windows support

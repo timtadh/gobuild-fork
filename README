@@ -47,6 +47,7 @@ Parameters
 -----------
 
 > gobuild [options] [gofile(s)]
+> gobuild -lib [options] [gopackage(s)]
 
  gofile(s)
         For building an executable you can give one or more go-file names
@@ -54,9 +55,18 @@ Parameters
         be called after the filename, but without extension.
         This parameter is optional if there's only one main file or the
         parameter -a is given.
+        
+ gopackage(s)
+        If building a library you can give a list of packages that should
+        be build. Only those packages will be build into libraries.
 
  -a
         Build all executables.
+
+ -clean
+        Deletes all temporary files. Files are the same as "make clean" and
+        it is possible that this will delete important files if called inside
+        the wrong directory.
 
  -include-hidden
         Include files in hidden directories and hidden files.

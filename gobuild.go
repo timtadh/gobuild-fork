@@ -31,6 +31,7 @@ var flagQuietMode *bool = flag.Bool("q", false, "only print warnings/errors");
 var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors");
 var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages");
 var flagIncludePaths *string = flag.String("I", "", "additional include paths");
+var flagClean *bool = flag.Bool("clean", false, "delete all temporary files");
 
 // ========== constants ==========
 
@@ -354,12 +355,6 @@ func compile(pack *goPackage) {
 	if pack.files.Len() == 0 {
 		error("No files found for package %s.\n", pack.name);
 		os.Exit(1);
-	} else {
-		pack.files.Do(func(e interface{}) {
-			gf := e.(*goFile);
-			fmt.Printf("%s ", gf.filename);
-		});
-		fmt.Println();
 	}
 	
 	// construct compiler command line arguments
@@ -575,22 +570,41 @@ func buildExecutable() {
  command line parameters.
 */
 func buildLibrary() {
-
-	// TODO: check for parameters
+	var packNames []string;
+	var pack *goPackage;
+	var exists bool;
 
 	if len(goPackageMap) == 0 {
 		warn("No packages found to build.\n");
 		return;
 	}
 
+	// check for command line parameters
+	if flag.NArg() > 0 {
+		packNames = flag.Args();
+	} else {
+		var i int;
+		packNames = make([]string, len(goPackageMap));
+		for name, _ := range goPackageMap {
+			packNames[i] = name;
+			i++;
+		}
+	}
+
 
 	// loop over all packages, compile them and build a .a file
-	for _, pack := range goPackageMap {
+	for _, name := range packNames {
 
-		if pack.name == "main" {
+		if name == "main" {
 			continue; // don't make this into a library
 		}
-
+		
+		pack, exists = goPackageMap[name];
+		if !exists {
+			error("Package %s doesn't exist.\n", name);
+			continue; // or exit?
+		}
+		
 		// these packages come from invalid/unhandled imports
 		if pack.files.Len() == 0 {
 			debug("Skipping package %s, no files to compile.\n", pack.name);
@@ -603,6 +617,46 @@ func buildLibrary() {
 			packLib(pack);
 		}
 	}
+
+}
+
+/*
+ This function does exactly the same as "make clean".
+*/
+func clean() {
+	bashBin, err := exec.LookPath("bash");
+	if err != nil {
+		error("Need bash to clean.\n");
+		os.Exit(1);
+	}
+
+	argv := []string{bashBin, "-c", "commandhere"};
+
+	if *flagVerboseMode {
+		argv[2] = "rm -rfv *.[568vqo] *.a [568vq].out *.cgo1.go *.cgo2.c _cgo_defun.c _cgo_gotypes.go *.so _obj _test _testmain.go";
+	} else {
+		argv[2] = "rm -rf *.[568vqo] *.a [568vq].out *.cgo1.go *.cgo2.c _cgo_defun.c _cgo_gotypes.go *.so _obj _test _testmain.go";
+	}
+	
+	info("Running: %v\n", argv[2:]);
+
+	cmd, err := exec.Run(bashBin, argv, os.Environ(),
+		exec.DevNull, exec.PassThrough, exec.PassThrough);
+	if err != nil {
+		error("%s\n", err);
+		os.Exit(1);
+	}
+	waitmsg, err := cmd.Wait(0);
+	if err != nil {
+		error("Couldn't delete files: %s\n", err);
+		os.Exit(1);
+	}
+
+	if waitmsg.ExitStatus() != 0 {
+		error("rm returned with errors.\n");
+		os.Exit(1);
+	}
+
 
 }
 
@@ -691,6 +745,11 @@ func main() {
 
 	// parse command line arguments
 	flag.Parse();
+
+	if *flagClean {
+		clean();
+		os.Exit(0);
+	}
 	
 	// get the compiler/linker executable
 	switch os.Getenv("GOARCH") {
