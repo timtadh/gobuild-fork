@@ -64,11 +64,13 @@ var goMainMap map[string] *goPackage;    // map with only the main function file
 var compilerBin string;
 var linkerBin string;
 var gopackBin string = "gopack";
-var mainGoFileName string; // can also be a command line parameter
 var compileError bool = false;
 var linkError bool = false;
 var rootPath string;
+var rootPathPerm int;
 var objExt string;
+var outputDirPrefix string;
+var defaultOutputFileName string;
 
 // ========== goFile methods ==========
 
@@ -144,7 +146,13 @@ func (this *goFile) parseFile() (err os.Error) {
 		// main package + main function -> don't add to package list but to
 		// goMainMap instead
 		goMainMap[this.filename] = this.pack;
-		this.pack.outputFile = this.filename[0:len(this.filename)-3];
+
+		// outputFile needs to be changed to the executable name
+		if defaultOutputFileName != "" {
+			this.pack.outputFile = defaultOutputFileName;
+		} else {
+			this.pack.outputFile = this.filename[0:len(this.filename)-3];
+		}
 	} else if packageName == "main" {
 		// main package + no main function -> combine with existing main
 		// package or create a new one
@@ -371,7 +379,7 @@ func compile(pack *goPackage) {
 
 	argv[argvFilled] = compilerBin; argvFilled++;
 	argv[argvFilled] = "-o"; argvFilled++;
-	argv[argvFilled] = pack.name + objExt; argvFilled++;
+	argv[argvFilled] = outputDirPrefix + pack.outputFile + objExt; argvFilled++;
 
 	if *flagIncludePaths != "" {
 		argv[argvFilled] = "-I"; argvFilled++;
@@ -422,29 +430,29 @@ func link(pack *goPackage) {
 		argv = []string{
 			linkerBin,
 			"-o",
-			pack.outputFile,
+			outputDirPrefix + pack.outputFile,
 			"-L",
 			*flagIncludePaths,
-			"main" + objExt};
+			outputDirPrefix + pack.outputFile + objExt};
 		
 	} else {
 		argv = make([]string, 4);
 		argv = []string{
 			linkerBin,
 			"-o",
-			pack.outputFile,
-			"main" + objExt};
+			outputDirPrefix + pack.outputFile,
+			outputDirPrefix + pack.outputFile + objExt};
 
 	}
 	
 	// possible output file modification with -o options
-	if *flagOutputFileName != "" {
+/*	if defaultOutputFileName != "" {
 		if flag.NArg() > 1 || (len(goMainMap) > 1 && *flagBuildAll) {
 			warn("Output file name ignored, can't build multiple targets into a single file.\n");
 		} else {
-			argv[2] = *flagOutputFileName;
+			argv[2] = defaultOutputFileName;
 		}	
-	}
+	}*/
 
 
 	info("Linking %s...\n", argv[2]);
@@ -474,8 +482,8 @@ func packLib(pack *goPackage) {
 	argv := []string{
 		gopackBin,
 		"crg", // create new go archive
-		pack.name + ".a",
-		pack.name + objExt};
+		outputDirPrefix + pack.name + ".a",
+		outputDirPrefix + pack.name + objExt};
 
 	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
 		exec.DevNull, exec.PassThrough, exec.PassThrough);
@@ -742,6 +750,7 @@ func max(a, b int) int {
 
 func main() {
 	var err os.Error;
+	var rootPathDir *os.Dir;
 
 	// parse command line arguments
 	flag.Parse();
@@ -788,15 +797,56 @@ func main() {
 	}
 	
 	// get the root path from where the application was called
-	rootPath, err = os.Getwd();
-	if err != nil {
+	// and its permissions (used for subdirectories)
+	if rootPath, err = os.Getwd(); err != nil {
 		error("Could not get the root path: %s\n", err);
 		os.Exit(1);
 	}
+	if rootPathDir, err = os.Stat(rootPath); err != nil {
+		error("Could not read the root path: %s\n", err);
+		os.Exit(1);
+	}
+	rootPathPerm = rootPathDir.Permission();
 
 	// create the package & main map
 	goPackageMap = make(map[string] *goPackage);
 	goMainMap = make(map[string] *goPackage);
+
+	// check if -o with path
+	if *flagOutputFileName != "" {
+		dir, err := os.Stat(*flagOutputFileName);
+		if err != nil {
+			// doesn't exist? try to make it if it's a path
+			if (*flagOutputFileName)[len(*flagOutputFileName)-1] == '/' {
+				err = os.MkdirAll(*flagOutputFileName, rootPathPerm);
+				if err == nil {
+					outputDirPrefix = *flagOutputFileName;
+				}
+			} else {
+				defaultOutputFileName = *flagOutputFileName;
+				// TODO: make sure the path to this file is created!
+			}
+		} else if dir.IsDirectory() {
+			if (*flagOutputFileName)[len(*flagOutputFileName)-1] == '/' {
+				outputDirPrefix = *flagOutputFileName;
+			} else {
+				outputDirPrefix = *flagOutputFileName + "/";
+			}
+		} else {
+			defaultOutputFileName = *flagOutputFileName;
+		}
+
+		// make path to output file
+		if outputDirPrefix == "" && strings.Index(*flagOutputFileName, "/") != -1 {
+			err = os.MkdirAll((*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")], rootPathPerm);
+			if err != nil {
+				error("Could not create %s: %s\n",
+					(*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")],
+					err);
+			}
+		}
+
+	}
 
 	// read all go files in the current path + subdirectories and parse them
 	readFiles(rootPath);
