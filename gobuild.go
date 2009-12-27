@@ -11,12 +11,12 @@ import (
 	os "os";
 	"exec";
 	"flag";
-	"fmt";
 	"path";
 	"strings";
 	"container/vector";
 	"go/ast";
 	"go/parser";
+	"./logger";
 )
 
 // ========== command line parameters ==========
@@ -50,7 +50,6 @@ type goPackage struct {
 
 type goFile struct {
 	filename string;         // file name with full path
-	content []byte;          // file content
 	pack *goPackage;         // the package this file belongs to
 	hasMain bool;            // main function found (only true for main package)
 	isCGOFile bool;          // imports "C"
@@ -58,7 +57,6 @@ type goFile struct {
 
 // ========== global (package) variables ==========
 
-var goFileVector vector.Vector;
 var goPackageMap map[string] *goPackage;
 var goMainMap map[string] *goPackage;    // map with only the main function files (one per entry)
 var compilerBin string;
@@ -86,7 +84,7 @@ func (this *goFile) parseFile() (err os.Error) {
 	packageName = fileast.Name.String();
 
 	if err != nil {
-		warn("Parsing file %s returned with errors: %s\n", this.filename, err);
+		logger.Warn("Parsing file %s returned with errors: %s\n", this.filename, err);
 	}
 
 	// ignore main package files if building a library
@@ -98,12 +96,12 @@ func (this *goFile) parseFile() (err os.Error) {
 	if packageName != "main" {
 		switch strings.Count(this.filename, "/") {
 		case 0: // no sub-directory
-			warn("File %s from package %s is not in the correct path. Should be %s.\n",
+			logger.Warn("File %s from package %s is not in the correct path. Should be %s.\n",
 				this.filename, fileast.Name, 
 				strings.Join([]string{packageName, this.filename}, "/"));
 		case 1: // one sub-directory
 			if this.filename[0:strings.Index(this.filename, "/")] != packageName {
-				warn("File %s from package %s is not in the correct directory. Should be %s.\n",
+				logger.Warn("File %s from package %s is not in the correct directory. Should be %s.\n",
 					this.filename, packageName,
 					strings.Join([]string{packageName,
 					this.filename[strings.Index(this.filename, "/")+1:len(this.filename)]}, "/"));
@@ -112,7 +110,7 @@ func (this *goFile) parseFile() (err os.Error) {
 			if this.filename[max(strings.LastIndex(this.filename, "/") - len(packageName), 0):strings.LastIndex(this.filename, "/")] != packageName {
 
 				// NOTE: this case will result in a link-error (exit with error here?)
-				warn("File %s from package %s is not in the expected directory.\n",
+				logger.Warn("File %s from package %s is not in the expected directory.\n",
 					this.filename, packageName);
 			}
 			packageName = strings.Join([]string{
@@ -248,9 +246,8 @@ func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 			return;
 		}
 
-		gf := goFile{path[len(rootPath)+1:len(path)], nil, nil, false, false};
+		gf := goFile{path[len(rootPath)+1:len(path)], nil, false, false};
 		gf.parseFile();
-		goFileVector.Push(&gf);
 	}
 }
 
@@ -325,15 +322,13 @@ func readFiles(rootpath string) {
 	// visitor for the path walker
 	visitor := &goFileVisitor{};
 	
-	info("Parsing go file(s)...\n");
+	logger.Info("Parsing go file(s)...\n");
 	
 	path.Walk(rootpath, visitor, errorChannel);
 	
 	if err, ok := <-errorChannel; ok {
-		error("Error while traversing directories: %s\n", err);
+		logger.Error("Error while traversing directories: %s\n", err);
 	}
-
-	info("Read %d go file(s).\n", goFileVector.Len());
 }
 
 /*
@@ -346,7 +341,7 @@ func compile(pack *goPackage) {
 
 	// check for recursive dependencies
 	if pack.inProgress {
-		error("Found a recurisve dependency in %s. This is not supported in Go, aborting compilation.\n", pack.name);
+		logger.Error("Found a recurisve dependency in %s. This is not supported in Go, aborting compilation.\n", pack.name);
 		os.Exit(1);
 	}
 	pack.inProgress = true;
@@ -361,15 +356,15 @@ func compile(pack *goPackage) {
 
 	// check if this package has any files (if not -> error)
 	if pack.files.Len() == 0 {
-		error("No files found for package %s.\n", pack.name);
+		logger.Error("No files found for package %s.\n", pack.name);
 		os.Exit(1);
 	}
 	
 	// construct compiler command line arguments
 	if (pack.name != "main") {
-		info("Compiling %s...\n", pack.name);
+		logger.Info("Compiling %s...\n", pack.name);
 	} else {
-		info("Compiling %s (%s)...\n", pack.name, pack.outputFile);
+		logger.Info("Compiling %s (%s)...\n", pack.name, pack.outputFile);
 	}
 	if *flagIncludePaths != "" {
 		argv = make([]string, pack.files.Len() + 5);
@@ -386,25 +381,25 @@ func compile(pack *goPackage) {
 		argv[argvFilled] = *flagIncludePaths; argvFilled++;
 	}
 
-	info("\tfiles: ");
+	logger.Info("\tfiles: ");
 	for i := 0; i < pack.files.Len(); i++  {
 		gf := pack.files.At(i).(*goFile);
 		argv[argvFilled] = gf.filename;
-		info("%s ", argv[argvFilled]);
+		logger.Info("%s ", argv[argvFilled]);
 		argvFilled++;
 	}
-	info("\n");
+	logger.Info("\n");
 		
 	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), exec.DevNull, 
 		exec.PassThrough, exec.PassThrough);
 	if err != nil {
-		error("%s\n", err);
+		logger.Error("%s\n", err);
 		os.Exit(1);
 	}
 
 	waitmsg, err := cmd.Wait(0);
 	if err != nil {
-		error("Compiler execution error (%s), aborting compilation.\n", err);
+		logger.Error("Compiler execution error (%s), aborting compilation.\n", err);
 		os.Exit(1);
 	}
 
@@ -445,39 +440,29 @@ func link(pack *goPackage) {
 
 	}
 	
-	// possible output file modification with -o options
-/*	if defaultOutputFileName != "" {
-		if flag.NArg() > 1 || (len(goMainMap) > 1 && *flagBuildAll) {
-			warn("Output file name ignored, can't build multiple targets into a single file.\n");
-		} else {
-			argv[2] = defaultOutputFileName;
-		}	
-	}*/
-
-
-	info("Linking %s...\n", argv[2]);
+	logger.Info("Linking %s...\n", argv[2]);
 
 	cmd, err := exec.Run(linkerBin, argv, os.Environ(),
 		exec.DevNull, exec.PassThrough, exec.PassThrough);
 	if err != nil {
-		error("%s\n", err);
+		logger.Error("%s\n", err);
 		os.Exit(1);
 	}
 	waitmsg, err := cmd.Wait(0);
 	if err != nil {
-		error("Linker execution error (%s), aborting compilation.\n", err);
+		logger.Error("Linker execution error (%s), aborting compilation.\n", err);
 		os.Exit(1);
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		error("Linker returned with errors, aborting.\n");
+		logger.Error("Linker returned with errors, aborting.\n");
 		os.Exit(1);
 	}
 }
 
 func packLib(pack *goPackage) {
 
-	info("Creating %s.a...\n", pack.name);
+	logger.Info("Creating %s.a...\n", pack.name);
 
 	argv := []string{
 		gopackBin,
@@ -488,17 +473,17 @@ func packLib(pack *goPackage) {
 	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
 		exec.DevNull, exec.PassThrough, exec.PassThrough);
 	if err != nil {
-		error("%s\n", err);
+		logger.Error("%s\n", err);
 		os.Exit(1);
 	}
 	waitmsg, err := cmd.Wait(0);
 	if err != nil {
-		error("gopack execution error (%s), aborting.\n", err);
+		logger.Error("gopack execution error (%s), aborting.\n", err);
 		os.Exit(1);
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		error("gopack returned with errors, aborting.\n");
+		logger.Error("gopack returned with errors, aborting.\n");
 		os.Exit(1);
 	}
 
@@ -510,17 +495,17 @@ func packLib(pack *goPackage) {
 func buildExecutable() {
 	// check if there's a main package:
 	if len(goMainMap) == 0 {
-		error("No main package found.\n");
+		logger.Error("No main package found.\n");
 		os.Exit(1);
 	}
 
 	// multiple main, no command file from command line and no -a -> error
 	if (len(goMainMap) > 1) && (flag.NArg() == 0) && !*flagBuildAll {
-		error("Multiple files found with main function.\n");
-		errorContinue("Please specify one or more as command line parameter or\n");
-		errorContinue("run gobuild with -a. Available main files are:\n");
+		logger.Error("Multiple files found with main function.\n");
+		logger.ErrorContinue("Please specify one or more as command line parameter or\n");
+		logger.ErrorContinue("run gobuild with -a. Available main files are:\n");
 		for fn, _ := range goMainMap {
-			errorContinue("\t %s\n", fn);
+			logger.ErrorContinue("\t %s\n", fn);
 		}
 		os.Exit(1);
 	}
@@ -530,7 +515,7 @@ func buildExecutable() {
 		for _, fn := range flag.Args() {
 			mainPack, exists := goMainMap[fn];
 			if !exists {
-				error("File %s not found.\n", fn);
+				logger.Error("File %s not found.\n", fn);
 				return; // or os.Exit?
 			}
 			
@@ -546,7 +531,7 @@ func buildExecutable() {
 			if !compileError {
 				link(mainPack);
 			} else {
-				error("Can't link executable because of compile errors.\n");
+				logger.Error("Can't link executable because of compile errors.\n");
 			}
 		}
 	} else {
@@ -564,7 +549,7 @@ func buildExecutable() {
 			if !compileError {
 				link(mainPack);
 			} else {
-				error("Can't link executable because of compile errors.\n");
+				logger.Error("Can't link executable because of compile errors.\n");
 			}
 		}
 	}
@@ -583,7 +568,7 @@ func buildLibrary() {
 	var exists bool;
 
 	if len(goPackageMap) == 0 {
-		warn("No packages found to build.\n");
+		logger.Warn("No packages found to build.\n");
 		return;
 	}
 
@@ -609,18 +594,18 @@ func buildLibrary() {
 		
 		pack, exists = goPackageMap[name];
 		if !exists {
-			error("Package %s doesn't exist.\n", name);
+			logger.Error("Package %s doesn't exist.\n", name);
 			continue; // or exit?
 		}
 		
 		// these packages come from invalid/unhandled imports
 		if pack.files.Len() == 0 {
-			debug("Skipping package %s, no files to compile.\n", pack.name);
+			logger.Debug("Skipping package %s, no files to compile.\n", pack.name);
 			continue;
 		}
 
 		if !pack.compiled {
-			debug("Building %s...\n", pack.name);
+			logger.Debug("Building %s...\n", pack.name);
 			compile(pack);
 			packLib(pack);
 		}
@@ -634,7 +619,7 @@ func buildLibrary() {
 func clean() {
 	bashBin, err := exec.LookPath("bash");
 	if err != nil {
-		error("Need bash to clean.\n");
+		logger.Error("Need bash to clean.\n");
 		os.Exit(1);
 	}
 
@@ -646,99 +631,28 @@ func clean() {
 		argv[2] = "rm -rf *.[568vqo] *.a [568vq].out *.cgo1.go *.cgo2.c _cgo_defun.c _cgo_gotypes.go *.so _obj _test _testmain.go";
 	}
 	
-	info("Running: %v\n", argv[2:]);
+	logger.Info("Running: %v\n", argv[2:]);
 
 	cmd, err := exec.Run(bashBin, argv, os.Environ(),
 		exec.DevNull, exec.PassThrough, exec.PassThrough);
 	if err != nil {
-		error("%s\n", err);
+		logger.Error("%s\n", err);
 		os.Exit(1);
 	}
 	waitmsg, err := cmd.Wait(0);
 	if err != nil {
-		error("Couldn't delete files: %s\n", err);
+		logger.Error("Couldn't delete files: %s\n", err);
 		os.Exit(1);
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		error("rm returned with errors.\n");
+		logger.Error("rm returned with errors.\n");
 		os.Exit(1);
 	}
 
 
 }
 
-
-/*
- Prints debug messages. Same syntax as fmt.Printf.
-*/
-func debug(format string, v ...) {
-	if *flagVerboseMode && !*flagQuietMode && !*flagQuieterMode {
-		fmt.Printf("DEBUG: ");
-		fmt.Printf(format, v);
-	}
-}
-
-/*
- Prints a debug message if enabled but without the "DEBUG: " prefix.
- Same syntax as fmt.Printf.
-*/
-func debugContinue(format string, v ...) {
-	if *flagVerboseMode && !*flagQuietMode && !*flagQuieterMode {
-		fmt.Printf("       ");
-		fmt.Printf(format, v);
-	}
-}
-
-/*
- Prints an info message if enabled. This is for general feedback about what
- gobuild is currently doing. Same syntax as fmt.Printf.
-*/
-func info(format string, v ...) {
-	if !*flagQuietMode && !*flagQuieterMode {
-		//fmt.Print("INFO: ");
-		fmt.Printf(format, v);
-	}
-}
-
-
-/*
- Prints a warning if warnings are enabled. Same syntax as fmt.Printf.
-*/
-func warn(format string, v ...) {
-	if !*flagQuieterMode {
-		fmt.Print("WARNING: ");
-		fmt.Printf(format, v);
-	}
-}
-
-/*
- Prints a warning message if enabled but without the "WARNING: " prefix.
- Same syntax as fmt.Printf.
-*/
-func warnContinue(format string, v ...) {
-	if !*flagQuieterMode {
-		fmt.Print("         ");
-		fmt.Printf(format, v);
-	}
-}
-
-/*
- Prints an error message. Same syntax as fmt.Printf.
-*/
-func error(format string, v ...) {
-	fmt.Fprint(os.Stderr, "ERROR: ");
-	fmt.Fprintf(os.Stderr, format, v);
-}
-
-/*
- Prints an error message but without the "ERROR: " prefix.
- Same syntax as fmt.Printf.
-*/
-func errorContinue(format string, v ...) {
-	fmt.Fprint(os.Stderr, "       ");
-	fmt.Fprintf(os.Stderr, format, v);
-}
 
 // Returns the bigger number.
 func max(a, b int) int {
@@ -754,6 +668,14 @@ func main() {
 
 	// parse command line arguments
 	flag.Parse();
+
+	if *flagQuieterMode {
+		logger.SetVerbosityLevel(logger.ERROR);
+	} else if *flagQuietMode {
+		logger.SetVerbosityLevel(logger.WARN);
+	} else if *flagVerboseMode {
+		logger.SetVerbosityLevel(logger.DEBUG);
+	}
 
 	if *flagClean {
 		clean();
@@ -775,35 +697,35 @@ func main() {
 		linkerBin = "5l";
 		objExt = ".5";
 	default:
-		error("Please specify a valid GOARCH (amd64/386/arm).\n");
+		logger.Error("Please specify a valid GOARCH (amd64/386/arm).\n");
 		os.Exit(1);		
 	}
 
 	// get the complete path to the compiler/linker
 	compilerBin, err = exec.LookPath(compilerBin);
 	if err != nil {
-		error("Could not find compiler %s: %s\n", compilerBin, err);
+		logger.Error("Could not find compiler %s: %s\n", compilerBin, err);
 		os.Exit(1);
 	}
 	linkerBin, err = exec.LookPath(linkerBin);
 	if err != nil {
-		error("Could not find linker %s: %s\n", linkerBin, err);
+		logger.Error("Could not find linker %s: %s\n", linkerBin, err);
 		os.Exit(1);
 	}
 	gopackBin, err = exec.LookPath(gopackBin);
 	if err != nil {
-		error("Could not find gopack executable (%s): %s\n", gopackBin, err);
+		logger.Error("Could not find gopack executable (%s): %s\n", gopackBin, err);
 		os.Exit(1);
 	}
 	
 	// get the root path from where the application was called
 	// and its permissions (used for subdirectories)
 	if rootPath, err = os.Getwd(); err != nil {
-		error("Could not get the root path: %s\n", err);
+		logger.Error("Could not get the root path: %s\n", err);
 		os.Exit(1);
 	}
 	if rootPathDir, err = os.Stat(rootPath); err != nil {
-		error("Could not read the root path: %s\n", err);
+		logger.Error("Could not read the root path: %s\n", err);
 		os.Exit(1);
 	}
 	rootPathPerm = rootPathDir.Permission();
@@ -840,7 +762,7 @@ func main() {
 		if outputDirPrefix == "" && strings.Index(*flagOutputFileName, "/") != -1 {
 			err = os.MkdirAll((*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")], rootPathPerm);
 			if err != nil {
-				error("Could not create %s: %s\n",
+				logger.Error("Could not create %s: %s\n",
 					(*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")],
 					err);
 			}
