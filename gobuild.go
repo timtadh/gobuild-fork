@@ -376,9 +376,9 @@ func clean() {
 	argv := []string{bashBin, "-c", "commandhere"};
 
 	if *flagVerboseMode {
-		argv[2] = "rm -rfv *.[568vqo] *.a [568vq].out *.cgo1.go *.cgo2.c _cgo_defun.c _cgo_gotypes.go *.so _obj _test _testmain.go";
+		argv[2] = "rm -rfv *.[568]";
 	} else {
-		argv[2] = "rm -rf *.[568vqo] *.a [568vq].out *.cgo1.go *.cgo2.c _cgo_defun.c _cgo_gotypes.go *.so _obj _test _testmain.go";
+		argv[2] = "rm -rf *.[568]";
 	}
 	
 	logger.Info("Running: %v\n", argv[2:]);
