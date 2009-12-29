@@ -8,12 +8,12 @@
 package godata
 
 import "container/vector"
-//import "./logger"
+import "./logger"
 
 const (
-	UNKNOWN_PACKAGE = iota;
-	LOCAL_PACKAGE;
-	REMOTE_PACKAGE;
+	UNKNOWN_PACKAGE = iota; // could be in the local path or somewhere else
+	LOCAL_PACKAGE;          // this is imported with "./name"
+	REMOTE_PACKAGE;         // unused right now
 )
 
 // ================================
@@ -36,6 +36,7 @@ type GoPackage struct {
  Creates a new goPackage.
 */
 func NewGoPackage(name string) *GoPackage {
+	logger.Debug("Creating new package %s\n", name);
 	pack := new(GoPackage);
 	pack.Type = UNKNOWN_PACKAGE;
 	pack.Compiled = false;
@@ -77,12 +78,31 @@ func (this *GoPackage) Clone() *GoPackage {
  keep all other things as they are.
 */
 func (this *GoPackage) Merge(pack *GoPackage) {
+	if this == pack {
+		logger.Warn("Trying to merge identical packages!\n");
+		return; // don't merge duplicates
+	}
 	pack.Files.Do(func(gf interface{}) {
 		this.Files.Push(gf.(*GoFile));
 	});
 	pack.Depends.Do(func(dep interface{}) {
 		this.Depends.Push(dep.(*GoPackage));
 	});
+	if pack.Type == LOCAL_PACKAGE {
+		this.Type = LOCAL_PACKAGE;
+	}
+}
+
+func (this *GoPackage) NeedsLocalSearchPath() bool {
+	var ret bool = false;
+	this.Depends.Do(func(dep interface{}) {
+		depPack := dep.(*GoPackage);
+		if depPack.Type == UNKNOWN_PACKAGE && depPack.Files.Len() > 0 {
+			ret = true;
+		}
+	});
+
+	return ret;
 }
 
 // ================================
@@ -103,22 +123,29 @@ func NewGoPackageContainer() *GoPackageContainer {
 
 /*
  Will add a package to the list of packages. If there is already a package with
- the same name the new package will be merged to the old one.
+ the same name the new package will be merged to the old one. The returned
+ package is the one that should be used after adding it.
 */
-func (this *GoPackageContainer) AddPackage(pack *GoPackage) {
+func (this *GoPackageContainer) AddPackage(pack *GoPackage) *GoPackage {
+	logger.Debug("AddPackage(%s)\n", pack.Name);
 	if existingPack, exists := this.packages[pack.Name]; exists {
-		existingPack.Merge(pack);
+		if existingPack != pack {
+			existingPack.Merge(pack);
+		}
+		return existingPack;
 	} else {
 		this.packages[pack.Name] = pack;
 	}
+	return pack;
 }
 
 /*
  Creates an empty GoPackage and adds it to the container.
 */
 func (this *GoPackageContainer) AddNewPackage(packName string) (pack *GoPackage) {
+	logger.Debug("AddNewPackage(%s)\n", packName);
 	pack = NewGoPackage(packName);
-	this.AddPackage(pack);
+	pack = this.AddPackage(pack);
 	return;
 }
 
@@ -128,15 +155,13 @@ func (this *GoPackageContainer) AddNewPackage(packName string) (pack *GoPackage)
  this file was added to.
 */
 func (this *GoPackageContainer) AddFile(gf *GoFile, packageName string) {
+	logger.Debug("AddFile(%s, %s)\n", gf.Filename, packageName);
 	var exists bool;
+	var existingPack *GoPackage;
 
 	// main package file with main func is a special case
 	// and needs to be put into this.mains
 	if packageName == "main" && gf.HasMain {
-		if gf.Pack == nil {
-			gf.Pack = NewGoPackage("main");
-			gf.Pack.Files.Push(gf);
-		}
 		this.mains[gf.Filename] = gf.Pack;
 
 		// overwrite output name (main) with better one (-o <name> or filename)
@@ -145,16 +170,19 @@ func (this *GoPackageContainer) AddFile(gf *GoFile, packageName string) {
 		} else {
 			gf.Pack.OutputFile = DefaultOutputFileName;
 		}
+		gf.Pack.Files.Push(gf);
 		return;
 	}
 
 	// check if package is already known
-	gf.Pack, exists = this.Get(packageName);
-	
+	existingPack, exists = this.Get(packageName);
 	if !exists {
-		gf.Pack = NewGoPackage(packageName);
 		this.AddPackage(gf.Pack);
+	} else if existingPack != gf.Pack {
+		existingPack.Merge(gf.Pack);
+		gf.Pack = existingPack;
 	}
+	
 	gf.Pack.Files.Push(gf);
 }
 
@@ -254,6 +282,4 @@ func (this *GoPackageContainer) GetPackageNames() (packNames []string) {
 	}
 	return;
 }
-
-
 

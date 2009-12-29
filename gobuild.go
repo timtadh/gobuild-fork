@@ -13,8 +13,8 @@ import (
 	"flag";
 	"path";
 	"strings";
-	"./logger";
 	"./godata";
+	"./logger";
 )
 
 // ========== command line parameters ==========
@@ -78,6 +78,17 @@ func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 // ========== (local) functions ==========
 
 /*
+ Returns an argv array in a single string with spaces dividing the entries.
+*/
+func getCommandline(argv []string) string {
+	var str string;
+	for _, s := range argv {
+		str += s + " ";
+	}
+	return str[0:len(str)-1];
+}
+
+/*
  readFiles reads all files with the .go extension and creates their AST.
  It also creates a list of local imports (everything starting with ./)
  and searches the main package files for the main function.
@@ -103,6 +114,7 @@ func readFiles(rootpath string) {
  starting with the main package.
 */
 func compile(pack *godata.GoPackage) {
+	var argc int;
 	var argv []string;
 	var argvFilled int;
 
@@ -112,19 +124,43 @@ func compile(pack *godata.GoPackage) {
 		os.Exit(1);
 	}
 	pack.InProgress = true;
+	
+	logger.Debug("processing %s (%d)\n", pack.Name, pack.Depends.Len());
 
 	// first compile all dependencies
 	pack.Depends.Do(func(e interface{}) {
 		dep := e.(*godata.GoPackage);
-		if !dep.Compiled {
+		logger.Debug("%s depends on %s (%d)\n", pack.Name, dep.Name, dep.Type);
+		if !dep.Compiled && 
+			(dep.Type == godata.LOCAL_PACKAGE || 
+			dep.Type == godata.UNKNOWN_PACKAGE && dep.Files.Len() > 0) {
 			compile(dep);
 		}
 	});
 
 	// check if this package has any files (if not -> error)
-	if pack.Files.Len() == 0 {
+	if pack.Files.Len() == 0 && pack.Type == godata.LOCAL_PACKAGE {
 		logger.Error("No files found for package %s.\n", pack.Name);
 		os.Exit(1);
+	}
+
+	// if the outputDirPrefix points to something, subdirectories need
+	// to be created if there are any
+	if outputDirPrefix != "" {
+		if strings.Index(pack.OutputFile, "/") != -1 {
+			path := outputDirPrefix + pack.OutputFile[0:strings.LastIndex(pack.OutputFile, "/")];
+			dir, err := os.Stat(path);
+			if err != nil {
+				err = os.MkdirAll(path, rootPathPerm);
+				if err != nil {
+					logger.Error("Could not create output path %s: %s\n", path, err);
+					os.Exit(1);
+				}
+			} else if !dir.IsDirectory() {
+				logger.Error("File found in %s instead of a directory.\n", path);
+				os.Exit(1);
+			}
+		}
 	}
 	
 	// construct compiler command line arguments
@@ -133,11 +169,15 @@ func compile(pack *godata.GoPackage) {
 	} else {
 		logger.Info("Compiling %s (%s)...\n", pack.Name, pack.OutputFile);
 	}
+	
+	argc = pack.Files.Len() + 3;
 	if *flagIncludePaths != "" {
-		argv = make([]string, pack.Files.Len() + 5);
-	} else {
-		argv = make([]string, pack.Files.Len() + 3);
+		argc += 2;
 	}
+	if pack.NeedsLocalSearchPath() {
+		argc += 2;
+	}
+	argv = make([]string, argc);
 
 	argv[argvFilled] = compilerBin; argvFilled++;
 	argv[argvFilled] = "-o"; argvFilled++;
@@ -148,15 +188,23 @@ func compile(pack *godata.GoPackage) {
 		argv[argvFilled] = *flagIncludePaths; argvFilled++;
 	}
 
-	logger.Info("\tfiles: ");
+	if pack.NeedsLocalSearchPath() {
+		argv[argvFilled] = "-I"; argvFilled++;
+		if outputDirPrefix != "" {
+			argv[argvFilled] = outputDirPrefix;
+		} else {
+			argv[argvFilled] = ".";
+		}
+		argvFilled++;
+	}	
+
 	for i := 0; i < pack.Files.Len(); i++  {
 		gf := pack.Files.At(i).(*godata.GoFile);
 		argv[argvFilled] = gf.Filename;
-		logger.Info("%s ", argv[argvFilled]);
 		argvFilled++;
 	}
-	logger.Info("\n");
-		
+
+	logger.Debug("%s\n", getCommandline(argv[0:argvFilled]));
 	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), exec.DevNull, 
 		exec.PassThrough, exec.PassThrough);
 	if err != nil {
@@ -185,29 +233,41 @@ func compile(pack *godata.GoPackage) {
  Calls the linker for the main file, which should be called "main.(5|6|8)".
 */
 func link(pack *godata.GoPackage) {
+	var argc int;
 	var argv []string;
+	var argvFilled int;
 
+	// build the command line for the linker
+	argc = 4;
 	if *flagIncludePaths != "" {
-		argv = make([]string, 6);
-		argv = []string{
-			linkerBin,
-			"-o",
-			outputDirPrefix + pack.OutputFile,
-			"-L",
-			*flagIncludePaths,
-			outputDirPrefix + pack.OutputFile + objExt};
-		
-	} else {
-		argv = make([]string, 4);
-		argv = []string{
-			linkerBin,
-			"-o",
-			outputDirPrefix + pack.OutputFile,
-			outputDirPrefix + pack.OutputFile + objExt};
-
+		argc += 2;
 	}
+	if pack.NeedsLocalSearchPath() {
+		argc += 2;
+	}
+
+	argv = make([]string, argc);
 	
+	argv[argvFilled] = linkerBin; argvFilled++;
+	argv[argvFilled] = "-o"; argvFilled++;
+	argv[argvFilled] = outputDirPrefix + pack.OutputFile; argvFilled++;
+	if *flagIncludePaths != "" {
+		argv[argvFilled] = "-L"; argvFilled++;
+		argv[argvFilled] = *flagIncludePaths; argvFilled++;
+	}
+	if pack.NeedsLocalSearchPath() {
+		argv[argvFilled] = "-L"; argvFilled++;
+		if outputDirPrefix != "" {
+			argv[argvFilled] = outputDirPrefix;
+		} else {
+			argv[argvFilled] = ".";
+		}
+		argvFilled++;
+	}
+	argv[argvFilled] = outputDirPrefix + pack.OutputFile + objExt; argvFilled++;
+
 	logger.Info("Linking %s...\n", argv[2]);
+	logger.Debug("%s\n", getCommandline(argv));
 
 	cmd, err := exec.Run(linkerBin, argv, os.Environ(),
 		exec.DevNull, exec.PassThrough, exec.PassThrough);
@@ -237,6 +297,7 @@ func packLib(pack *godata.GoPackage) {
 		outputDirPrefix + pack.Name + ".a",
 		outputDirPrefix + pack.Name + objExt};
 
+	logger.Debug("%s\n", getCommandline(argv));
 	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
 		exec.DevNull, exec.PassThrough, exec.PassThrough);
 	if err != nil {
@@ -308,8 +369,6 @@ func buildExecutable() {
 			}
 		}
 	}
-	
-
 }
 
 
@@ -346,6 +405,11 @@ func buildLibrary() {
 		if !exists {
 			logger.Error("Package %s doesn't exist.\n", name);
 			continue; // or exit?
+		}
+
+		// don't compile remote packages or packages without files
+		if pack.Type == godata.REMOTE_PACKAGE || pack.Files.Len() == 0 {
+			continue;
 		}
 		
 		// these packages come from invalid/unhandled imports
@@ -399,8 +463,6 @@ func clean() {
 		logger.Error("rm returned with errors.\n");
 		os.Exit(1);
 	}
-
-
 }
 
 

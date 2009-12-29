@@ -75,9 +75,8 @@ func (this *GoFile) ParseFile(packs *GoPackageContainer) (err os.Error) {
 		}
 	}
 	
-	// temporary package, will be merged later
+	// create empty temporary package, will be merged later
 	this.Pack = NewGoPackage(packName);
-	this.Pack.Files.Push(this);
 
 	// find the local imports in this file
 	visitor := astVisitor{this, packs};
@@ -105,22 +104,32 @@ type astVisitor struct {
 func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 	switch n := node.(type) {
 	case *ast.ImportSpec:
+		var packName string;
+		var packType int;
 		for _, bl := range n.Path {
 			if (len(bl.Value) > 4) && 
 				(bl.Value[1] == '.') &&
 				(bl.Value[2] == '/'){
 				
 				// local package found
-				packName := string(bl.Value[3:len(bl.Value)-1]);
-				dep, exists := v.packs.Get(packName);
-				if !exists {
-					dep = v.packs.AddNewPackage(packName);
-					
-				}
-				dep.Type = LOCAL_PACKAGE;
-				v.file.Pack.Depends.Push(dep);
+				packName = string(bl.Value[3:len(bl.Value)-1]);
+				packType = LOCAL_PACKAGE;
+				
+			} else {
+				packName = string(bl.Value[1:len(bl.Value)-1]);
+				packType = UNKNOWN_PACKAGE;
+			}
+
+			dep, exists := v.packs.Get(packName);
+			if !exists {
+				dep = v.packs.AddNewPackage(packName);
+			} else if dep.Type == LOCAL_PACKAGE {
+				packType = LOCAL_PACKAGE;
 			}
 			
+			dep.Type = packType;
+			v.file.Pack.Depends.Push(dep);
+
 			if string(bl.Value) == "\"C\"" {
 				v.file.IsCGOFile = true; // not used yet
 			}
