@@ -36,7 +36,6 @@ type GoPackage struct {
  Creates a new goPackage.
 */
 func NewGoPackage(name string) *GoPackage {
-	logger.Debug("Creating new package %s\n", name);
 	pack := new(GoPackage);
 	pack.Type = UNKNOWN_PACKAGE;
 	pack.Compiled = false;
@@ -127,7 +126,6 @@ func NewGoPackageContainer() *GoPackageContainer {
  package is the one that should be used after adding it.
 */
 func (this *GoPackageContainer) AddPackage(pack *GoPackage) *GoPackage {
-	logger.Debug("AddPackage(%s)\n", pack.Name);
 	if existingPack, exists := this.packages[pack.Name]; exists {
 		if existingPack != pack {
 			existingPack.Merge(pack);
@@ -143,7 +141,6 @@ func (this *GoPackageContainer) AddPackage(pack *GoPackage) *GoPackage {
  Creates an empty GoPackage and adds it to the container.
 */
 func (this *GoPackageContainer) AddNewPackage(packName string) (pack *GoPackage) {
-	logger.Debug("AddNewPackage(%s)\n", packName);
 	pack = NewGoPackage(packName);
 	pack = this.AddPackage(pack);
 	return;
@@ -155,7 +152,6 @@ func (this *GoPackageContainer) AddNewPackage(packName string) (pack *GoPackage)
  this file was added to.
 */
 func (this *GoPackageContainer) AddFile(gf *GoFile, packageName string) {
-	logger.Debug("AddFile(%s, %s)\n", gf.Filename, packageName);
 	var exists bool;
 	var existingPack *GoPackage;
 

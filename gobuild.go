@@ -125,12 +125,9 @@ func compile(pack *godata.GoPackage) {
 	}
 	pack.InProgress = true;
 	
-	logger.Debug("processing %s (%d)\n", pack.Name, pack.Depends.Len());
-
 	// first compile all dependencies
 	pack.Depends.Do(func(e interface{}) {
 		dep := e.(*godata.GoPackage);
-		logger.Debug("%s depends on %s (%d)\n", pack.Name, dep.Name, dep.Type);
 		if !dep.Compiled && 
 			(dep.Type == godata.LOCAL_PACKAGE || 
 			dep.Type == godata.UNKNOWN_PACKAGE && dep.Files.Len() > 0) {
