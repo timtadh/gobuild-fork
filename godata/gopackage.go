@@ -279,3 +279,15 @@ func (this *GoPackageContainer) GetPackageNames() (packNames []string) {
 	return;
 }
 
+func (this *GoPackage) HasTestFiles() bool {
+	var hasTest bool = false;
+
+	this.Files.Do(func(e interface{}) {
+		if (e.(*GoFile)).IsTestFile {
+			hasTest = true;
+		}
+	});
+
+	return hasTest;
+}
+

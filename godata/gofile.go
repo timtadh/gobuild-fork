@@ -10,9 +10,18 @@ import (
 	"go/ast";
 	"go/parser";
 	"./logger";
+	"container/vector";
 )
 
 var DefaultOutputFileName string;
+
+// Returns the greater of both numbers.
+func max(a, b int) int {
+	if a > b {
+		return a;
+	}
+	return b;
+}
 
 // ================================
 // ============ GoFile ============
@@ -23,25 +32,22 @@ type GoFile struct {
 	Pack *GoPackage;         // the package this file belongs to
 	HasMain bool;            // main function found (only true for main package)
 	IsCGOFile bool;          // imports "C"
+	IsTestFile bool;         // files with "_test.go" suffix
+	TestFunctions *vector.Vector; // vector of all test functions (name only)
+	BenchmarkFunctions *vector.Vector; // vector of all benchmark functions (name only)
 }
 
-// Returns the greater of both numbers.
-func max(a, b int) int {
-	if a > b {
-		return a;
-	}
-	return b;
-}
 
 /*
  Parses the content of a .go file and searches for package name, imports and
  main function.
 */
 func (this *GoFile) ParseFile(packs *GoPackageContainer) (err os.Error) {
-	var fileast *ast.File;
 	var packName string;
+	var fileast *ast.File;
 
 	fileast, err = parser.ParseFile(this.Filename, nil, 0);
+	
 	packName = fileast.Name.String();
 
 	if err != nil {
@@ -149,6 +155,14 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 	case *ast.FuncDecl:
 		if n.Recv == nil && n.Name.Value == "main" && v.file.Pack.Name == "main" {
 			v.file.HasMain = true;
+		} else if n.Recv == nil && v.file.IsTestFile && 
+			strings.HasPrefix(n.Name.Value, "Test")  &&
+			n.Body != nil {
+			v.file.TestFunctions.Push(n.Name.Value);
+		} else if n.Recv == nil && v.file.IsTestFile && 
+			strings.HasPrefix(n.Name.Value, "Benchmark") &&
+			n.Body != nil {
+			v.file.BenchmarkFunctions.Push(n.Name.Value);
 		}
 		return nil;
 	default:

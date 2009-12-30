@@ -13,6 +13,7 @@ import (
 	"flag";
 	"path";
 	"strings";
+	"container/vector";
 	"./godata";
 	"./logger";
 )
@@ -70,7 +71,14 @@ func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 			return;
 		}
 
-		gf := godata.GoFile{path[len(rootPath)+1:len(path)], nil, false, false};
+		gf := godata.GoFile{path[len(rootPath)+1:len(path)], nil, false,
+			false, strings.HasSuffix(path, "_test.go"), nil, nil};
+
+		if gf.IsTestFile {
+			gf.TestFunctions = new(vector.Vector);
+			gf.BenchmarkFunctions = new(vector.Vector);
+		}
+
 		gf.ParseFile(goPackages);
 	}
 }
@@ -107,6 +115,117 @@ func readFiles(rootpath string) {
 	if err, ok := <-errorChannel; ok {
 		logger.Error("Error while traversing directories: %s\n", err);
 	}
+}
+
+/*
+ Creates a main package and _test.go file for building a test application.
+*/
+func createTestPackage() *godata.GoPackage {
+	var testFileSource string;
+	var testArrays string;
+	var testCalls string;
+	var benchCalls string;
+	var testGoFile *godata.GoFile;
+	var testPack *godata.GoPackage;
+	var testFile *os.File;
+	var err os.Error;
+	var pack *godata.GoPackage;
+	
+	testGoFile = new(godata.GoFile);
+	testPack = godata.NewGoPackage("main");
+
+	testGoFile.Filename = "_test.go";
+	testGoFile.Pack = testPack;
+	testGoFile.HasMain = true;
+	testGoFile.IsTestFile = true;
+	
+	testPack.OutputFile = "_test";
+	testPack.Files.Push(testGoFile);
+
+	// search for packages with _test.go files
+	for _, packName := range goPackages.GetPackageNames() {
+		pack, _ = goPackages.Get(packName);
+
+		if pack.HasTestFiles() {
+			testPack.Depends.Push(pack);
+		}
+	}
+
+	// imports
+	testFileSource = 
+		"package main\n" +
+		"\nimport \"testing\"\n";
+
+	//testPack.Depends.Do(func(e interface{}) {
+	for ipack := range testPack.Depends.Iter() {
+		var tmpStr string;
+		var fnCount int = 0;
+		pack := (ipack.(*godata.GoPackage));
+		
+		testFileSource += "import \"" + pack.Name + "\"\n";
+
+		tmpStr = "var test_" + pack.Name + " = []testing.Test {\n";
+		for igf := range pack.Files.Iter() {
+			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename);
+			if (igf.(*godata.GoFile)).IsTestFile {
+				for istr := range (igf.(*godata.GoFile)).TestFunctions.Iter() {
+					tmpStr += "\ttesting.Test{ \"" + 
+						pack.Name + "." + istr.(string) + 
+						"\", " +
+						pack.Name + "." + istr.(string) +
+						" },\n";
+					fnCount++;
+				}
+			}
+		}
+		tmpStr += "}\n\n";
+
+		if fnCount > 0 {
+			testCalls += "\ttesting.Main(test_" + pack.Name + ");\n";
+			testArrays += tmpStr;
+		}
+
+		fnCount = 0;
+		tmpStr = "var bench_" + pack.Name + " = []testing.Benchmark {\n";
+		for igf := range pack.Files.Iter() {
+			if (igf.(*godata.GoFile)).IsTestFile {
+				for istr := range (igf.(*godata.GoFile)).BenchmarkFunctions.Iter() {
+					tmpStr += "\ttesting.Benchmark{ \"" + 
+						pack.Name + "." + istr.(string) + 
+						"\", " +
+						pack.Name + "." + istr.(string) +
+						" },\n";
+					fnCount++;
+				}
+			}
+		}
+		tmpStr += "}\n\n";
+
+		if fnCount > 0 {
+			benchCalls += "\ttesting.RunBenchmarks(bench_" + pack.Name + ");\n";
+			testArrays += tmpStr;
+		}
+	}
+
+	testFileSource += "\n" + testArrays;
+	
+	// func main()
+	testFileSource +=
+		"\nfunc main() {\n" +
+		testCalls +
+		benchCalls +
+		"}\n";
+
+	testFile, err = os.Open(testGoFile.Filename, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0666);
+	if err != nil {
+		logger.Error("Could not create %s: %s\n", testGoFile.Filename, err);
+		os.Exit(1);
+	}
+	defer testFile.Close();
+
+	testFile.WriteString(testFileSource);
+
+	return testPack;
 }
 
 /*
@@ -421,7 +540,22 @@ func buildLibrary() {
 			packLib(pack);
 		}
 	}
+}
 
+func buildTestExecutable() {
+	testPack := createTestPackage();
+	
+	compile(testPack);
+	
+	// link everything together
+	if !compileError {
+		link(testPack);
+	} else {
+		logger.Error("Can't link executable because of compile errors.\n");
+	}
+
+	// delete temporary _test.go file
+	
 }
 
 /*
@@ -580,7 +714,9 @@ func main() {
 	// read all go files in the current path + subdirectories and parse them
 	readFiles(rootPath);
 
-	if *flagLibrary {
+	if *flagTesting {
+		buildTestExecutable();
+	} else if *flagLibrary {
 		buildLibrary();
 	} else {
 		buildExecutable();
