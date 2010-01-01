@@ -1,5 +1,4 @@
  - -t with no _test files -> error
- - _test.go -> _testmain.go and delete after compiling
  - -run parameter (for exe and -t)
  - change root path if command line to main file is in a different (non-sub) directory
  - create (HTML) docs (without HTTP-server)

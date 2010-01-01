@@ -6,15 +6,16 @@ include $(GOROOT)/src/Make.$(GOARCH)
 
 TARG=gobuild
 GOFILES=gobuild.go
+OFILES=logger.$O godata.$O
 
-all: logger.6 godata.6 $(TARG)
-
-logger.6: 
-	$(GC) -o logger.$O logger/logger.go
-
-godata.6:
-	$(GC) -o godata.$O godata/gofile.go godata/gopackage.go
-
+all: $(OFILES)
+install: $(OFILES)
 
 include $(GOROOT)/src/Make.cmd
+
+logger.$O:
+	$(GC) -o logger.$O logger/logger.go
+
+godata.$O:
+	$(GC) -o godata.$O godata/gofile.go godata/gopackage.go
 
