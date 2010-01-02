@@ -465,7 +465,7 @@ func packLib(pack *godata.GoPackage) {
 
 	if waitmsg.ExitStatus() != 0 {
 		logger.Error("gopack returned with errors, aborting.\n");
-		os.Exit(1);
+		os.Exit(waitmsg.ExitStatus());
 	}
 }
 
@@ -601,7 +601,7 @@ func clean() {
 	bashBin, err := exec.LookPath("bash");
 	if err != nil {
 		logger.Error("Need bash to clean.\n");
-		os.Exit(1);
+		os.Exit(127);
 	}
 
 	argv := []string{bashBin, "-c", "commandhere"};
@@ -628,7 +628,7 @@ func clean() {
 
 	if waitmsg.ExitStatus() != 0 {
 		logger.Error("rm returned with errors.\n");
-		os.Exit(1);
+		os.Exit(waitmsg.ExitStatus());
 	}
 }
 
@@ -684,17 +684,17 @@ func main() {
 	compilerBin, err = exec.LookPath(compilerBin);
 	if err != nil {
 		logger.Error("Could not find compiler %s: %s\n", compilerBin, err);
-		os.Exit(1);
+		os.Exit(127);
 	}
 	linkerBin, err = exec.LookPath(linkerBin);
 	if err != nil {
 		logger.Error("Could not find linker %s: %s\n", linkerBin, err);
-		os.Exit(1);
+		os.Exit(127);
 	}
 	gopackBin, err = exec.LookPath(gopackBin);
 	if err != nil {
 		logger.Error("Could not find gopack executable (%s): %s\n", gopackBin, err);
-		os.Exit(1);
+		os.Exit(127);
 	}
 	
 	// get the root path from where the application was called
