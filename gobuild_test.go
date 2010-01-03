@@ -11,7 +11,7 @@ func TestGobuild(t *testing.T) {
 }
 
 func BenchmarkGobuild(b *testing.B) {
-        b.StopTimer()
+	b.StopTimer()
 	fmt.Println("Benchmarks would be nice too...")
-        b.StartTimer()
+	b.StartTimer()
 }

@@ -4,29 +4,27 @@ import "fmt"
 import "os"
 
 const (
-	DEBUG = -1 + iota; // start with -1
-	DEFAULT;           // should be 0
-	WARN;
-	ERROR;
+	DEBUG   = -1 + iota // start with -1
+	DEFAULT // should be 0
+	WARN
+	ERROR
 )
 
-var verbosity int;
+var verbosity int
 
 /*
  Sets the verbosity level. Possible values are DEBUG, DEFAULT, WARN and ERROR.
  DEFAULT is the standard value which will print everything but debug messages.
 */
-func SetVerbosityLevel(level int) {
-	verbosity = level;
-}
+func SetVerbosityLevel(level int) { verbosity = level }
 
 /*
  Prints debug messages. Same syntax as fmt.Printf.
 */
 func Debug(format string, v ...) {
 	if verbosity <= DEBUG {
-		fmt.Printf("DEBUG: ");
-		fmt.Printf(format, v);
+		fmt.Printf("DEBUG: ")
+		fmt.Printf(format, v)
 	}
 }
 
@@ -36,8 +34,8 @@ func Debug(format string, v ...) {
 */
 func DebugContinue(format string, v ...) {
 	if verbosity <= DEBUG {
-		fmt.Printf("       ");
-		fmt.Printf(format, v);
+		fmt.Printf("       ")
+		fmt.Printf(format, v)
 	}
 }
 
@@ -47,7 +45,7 @@ func DebugContinue(format string, v ...) {
 */
 func Info(format string, v ...) {
 	if verbosity <= DEFAULT {
-		fmt.Printf(format, v);
+		fmt.Printf(format, v)
 	}
 }
 
@@ -57,8 +55,8 @@ func Info(format string, v ...) {
 */
 func Warn(format string, v ...) {
 	if verbosity <= WARN {
-		fmt.Print("WARNING: ");
-		fmt.Printf(format, v);
+		fmt.Print("WARNING: ")
+		fmt.Printf(format, v)
 	}
 }
 
@@ -68,8 +66,8 @@ func Warn(format string, v ...) {
 */
 func WarnContinue(format string, v ...) {
 	if verbosity <= WARN {
-		fmt.Print("         ");
-		fmt.Printf(format, v);
+		fmt.Print("         ")
+		fmt.Printf(format, v)
 	}
 }
 
@@ -78,8 +76,8 @@ func WarnContinue(format string, v ...) {
 */
 func Error(format string, v ...) {
 	if verbosity <= ERROR {
-		fmt.Fprint(os.Stderr, "ERROR: ");
-		fmt.Fprintf(os.Stderr, format, v);
+		fmt.Fprint(os.Stderr, "ERROR: ")
+		fmt.Fprintf(os.Stderr, format, v)
 	}
 }
 
@@ -89,7 +87,7 @@ func Error(format string, v ...) {
 */
 func ErrorContinue(format string, v ...) {
 	if verbosity <= ERROR {
-		fmt.Fprint(os.Stderr, "       ");
-		fmt.Fprintf(os.Stderr, format, v);
+		fmt.Fprint(os.Stderr, "       ")
+		fmt.Fprintf(os.Stderr, format, v)
 	}
 }
