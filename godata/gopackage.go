@@ -11,9 +11,9 @@ import "container/vector"
 import "./logger"
 
 const (
-	UNKNOWN_PACKAGE = iota; // could be in the local path or somewhere else
-	LOCAL_PACKAGE;          // this is imported with "./name"
-	REMOTE_PACKAGE;         // unused right now
+	UNKNOWN_PACKAGE = iota // could be in the local path or somewhere else
+	LOCAL_PACKAGE   // this is imported with "./name"
+	REMOTE_PACKAGE  // unused right now
 )
 
 // ================================
@@ -21,55 +21,51 @@ const (
 // ================================
 
 type GoPackage struct {
-	Name string;             // name of the package
-	Path string;             // possible relative path to the package
-	Type int;                // local, remote or unknown (default)
-	Files *vector.Vector;    // a list of files for this package
-	Depends *vector.Vector;  // a list of other local packages this one depends on
-	Compiled bool;           // true = finished compiling
-	InProgress bool;         // true = currently trying to compile dependencies (needed to find recursive dependencies)
-	HasErrors bool;          // true = compiler returned an error
-	OutputFile string;       // filename (and maybe path) of the output files without extensions
+	Name       string         // name of the package
+	Path       string         // possible relative path to the package
+	Type       int            // local, remote or unknown (default)
+	Files      *vector.Vector // a list of files for this package
+	Depends    *vector.Vector // a list of other local packages this one depends on
+	Compiled   bool           // true = finished compiling
+	InProgress bool           // true = currently trying to compile dependencies (needed to find recursive dependencies)
+	HasErrors  bool           // true = compiler returned an error
+	OutputFile string         // filename (and maybe path) of the output files without extensions
 }
 
 /*
  Creates a new goPackage.
 */
 func NewGoPackage(name string) *GoPackage {
-	pack := new(GoPackage);
-	pack.Type = UNKNOWN_PACKAGE;
-	pack.Compiled = false;
-	pack.InProgress = false;
-	pack.HasErrors = false;
-	pack.Name = name;
-	pack.Files = new(vector.Vector);
-	pack.Depends = new(vector.Vector);
-	pack.OutputFile = name;
-	
-	return pack;
+	pack := new(GoPackage)
+	pack.Type = UNKNOWN_PACKAGE
+	pack.Compiled = false
+	pack.InProgress = false
+	pack.HasErrors = false
+	pack.Name = name
+	pack.Files = new(vector.Vector)
+	pack.Depends = new(vector.Vector)
+	pack.OutputFile = name
+
+	return pack
 }
 
 /*
  Creates a clone of a package. Entries in files and depends are the same but with new vectors.
 */
 func (this *GoPackage) Clone() *GoPackage {
-	pack := new(GoPackage);
-	pack.Type = this.Type;
-	pack.Compiled = this.Compiled;
-	pack.InProgress = this.InProgress;
-	pack.HasErrors = this.HasErrors;
-	pack.Name = this.Name;
-	pack.Files = new(vector.Vector);
-	this.Files.Do(func(gf interface{}) {
-		pack.Files.Push(gf.(*GoFile));
-	});
-	pack.Depends = new(vector.Vector);
-	this.Depends.Do(func(dep interface{}) {
-		pack.Depends.Push(dep.(*GoPackage));
-	});
-	pack.OutputFile = this.OutputFile;
+	pack := new(GoPackage)
+	pack.Type = this.Type
+	pack.Compiled = this.Compiled
+	pack.InProgress = this.InProgress
+	pack.HasErrors = this.HasErrors
+	pack.Name = this.Name
+	pack.Files = new(vector.Vector)
+	this.Files.Do(func(gf interface{}) { pack.Files.Push(gf.(*GoFile)) })
+	pack.Depends = new(vector.Vector)
+	this.Depends.Do(func(dep interface{}) { pack.Depends.Push(dep.(*GoPackage)) })
+	pack.OutputFile = this.OutputFile
 
-	return pack;
+	return pack
 }
 
 /*
@@ -78,30 +74,26 @@ func (this *GoPackage) Clone() *GoPackage {
 */
 func (this *GoPackage) Merge(pack *GoPackage) {
 	if this == pack {
-		logger.Warn("Trying to merge identical packages!\n");
-		return; // don't merge duplicates
+		logger.Warn("Trying to merge identical packages!\n")
+		return // don't merge duplicates
 	}
-	pack.Files.Do(func(gf interface{}) {
-		this.Files.Push(gf.(*GoFile));
-	});
-	pack.Depends.Do(func(dep interface{}) {
-		this.Depends.Push(dep.(*GoPackage));
-	});
+	pack.Files.Do(func(gf interface{}) { this.Files.Push(gf.(*GoFile)) })
+	pack.Depends.Do(func(dep interface{}) { this.Depends.Push(dep.(*GoPackage)) })
 	if pack.Type == LOCAL_PACKAGE {
-		this.Type = LOCAL_PACKAGE;
+		this.Type = LOCAL_PACKAGE
 	}
 }
 
 func (this *GoPackage) NeedsLocalSearchPath() bool {
-	var ret bool = false;
+	var ret bool = false
 	this.Depends.Do(func(dep interface{}) {
-		depPack := dep.(*GoPackage);
+		depPack := dep.(*GoPackage)
 		if depPack.Type == UNKNOWN_PACKAGE && depPack.Files.Len() > 0 {
-			ret = true;
+			ret = true
 		}
-	});
+	})
 
-	return ret;
+	return ret
 }
 
 // ================================
@@ -109,15 +101,15 @@ func (this *GoPackage) NeedsLocalSearchPath() bool {
 // ================================
 
 type GoPackageContainer struct {
-	packages map[string]*GoPackage;
-	mains map[string]*GoPackage;
+	packages map[string]*GoPackage
+	mains    map[string]*GoPackage
 }
 
 func NewGoPackageContainer() *GoPackageContainer {
-	gpc := new(GoPackageContainer);
-	gpc.packages = make(map[string]*GoPackage);
-	gpc.mains = make(map[string]*GoPackage);
-	return gpc;
+	gpc := new(GoPackageContainer)
+	gpc.packages = make(map[string]*GoPackage)
+	gpc.mains = make(map[string]*GoPackage)
+	return gpc
 }
 
 /*
@@ -128,22 +120,22 @@ func NewGoPackageContainer() *GoPackageContainer {
 func (this *GoPackageContainer) AddPackage(pack *GoPackage) *GoPackage {
 	if existingPack, exists := this.packages[pack.Name]; exists {
 		if existingPack != pack {
-			existingPack.Merge(pack);
+			existingPack.Merge(pack)
 		}
-		return existingPack;
+		return existingPack
 	} else {
-		this.packages[pack.Name] = pack;
+		this.packages[pack.Name] = pack
 	}
-	return pack;
+	return pack
 }
 
 /*
  Creates an empty GoPackage and adds it to the container.
 */
 func (this *GoPackageContainer) AddNewPackage(packName string) (pack *GoPackage) {
-	pack = NewGoPackage(packName);
-	pack = this.AddPackage(pack);
-	return;
+	pack = NewGoPackage(packName)
+	pack = this.AddPackage(pack)
+	return
 }
 
 /*
@@ -152,43 +144,43 @@ func (this *GoPackageContainer) AddNewPackage(packName string) (pack *GoPackage)
  this file was added to.
 */
 func (this *GoPackageContainer) AddFile(gf *GoFile, packageName string) {
-	var exists bool;
-	var existingPack *GoPackage;
+	var exists bool
+	var existingPack *GoPackage
 
 	// main package file with main func is a special case
 	// and needs to be put into this.mains
 	if packageName == "main" && gf.HasMain {
-		this.mains[gf.Filename] = gf.Pack;
+		this.mains[gf.Filename] = gf.Pack
 
 		// overwrite output name (main) with better one (-o <name> or filename)
 		if DefaultOutputFileName == "" {
-			gf.Pack.OutputFile = gf.Filename[0:len(gf.Filename)-3];
+			gf.Pack.OutputFile = gf.Filename[0 : len(gf.Filename)-3]
 		} else {
-			gf.Pack.OutputFile = DefaultOutputFileName;
+			gf.Pack.OutputFile = DefaultOutputFileName
 		}
-		gf.Pack.Files.Push(gf);
-		return;
+		gf.Pack.Files.Push(gf)
+		return
 	}
 
 	// check if package is already known
-	existingPack, exists = this.Get(packageName);
+	existingPack, exists = this.Get(packageName)
 	if !exists {
-		this.AddPackage(gf.Pack);
+		this.AddPackage(gf.Pack)
 	} else if existingPack != gf.Pack {
-		existingPack.Merge(gf.Pack);
-		gf.Pack = existingPack;
+		existingPack.Merge(gf.Pack)
+		gf.Pack = existingPack
 	}
-	
-	gf.Pack.Files.Push(gf);
+
+	gf.Pack.Files.Push(gf)
 }
 
 /*
  Returns a GoPackage for a given package name, or (nil, false) if none was found.
 */
 func (this *GoPackageContainer) Get(name string) (pack *GoPackage, exists bool) {
-	pack, exists = this.packages[name];
+	pack, exists = this.packages[name]
 
-	return;
+	return
 }
 
 /*
@@ -200,50 +192,50 @@ func (this *GoPackageContainer) Get(name string) (pack *GoPackage, exists bool) 
  it might not change values in the original package.
 */
 func (this *GoPackageContainer) GetMain(filename string, merge bool) (pack *GoPackage, exists bool) {
-	var mainPack *GoPackage;
-	
+	var mainPack *GoPackage
+
 	// first check if file exists
 	if pack, exists = this.mains[filename]; !exists {
-		return nil, exists;
+		return nil, exists
 	}
 
 	// get the main package without main functions
-	mainPack, exists = this.packages["main"];
-	
+	mainPack, exists = this.packages["main"]
+
 	if exists && merge {
-		pack = pack.Clone();
-		pack.Merge(mainPack);
+		pack = pack.Clone()
+		pack.Merge(mainPack)
 	}
 
-	return pack, true;
+	return pack, true
 }
 
 /*
 
 */
 func (this *GoPackageContainer) GetPackageCount() int {
-	return len(this.packages);
+	return len(this.packages)
 }
 
 /*
 
 */
 func (this *GoPackageContainer) GetMainCount() int {
-	return len(this.mains);
+	return len(this.mains)
 }
 
 /*
 
 */
 func (this *GoPackageContainer) GetMainFilenames() (names []string) {
-	names = make([]string, this.GetMainCount());
-	var i int;
+	names = make([]string, this.GetMainCount())
+	var i int
 	for fn, _ := range this.mains {
-		names[i] = fn;
-		i++;
+		names[i] = fn
+		i++
 	}
 
-	return;
+	return
 }
 
 /*
@@ -254,40 +246,39 @@ func (this *GoPackageContainer) GetMainFilenames() (names []string) {
  them might not change values in the original packages.
 */
 func (this *GoPackageContainer) GetMainPackages(merge bool) (pack []*GoPackage) {
-	pack = make([]*GoPackage, this.GetMainCount());
-	mainPack, mainExists := this.packages["main"];
-	var i int;
+	pack = make([]*GoPackage, this.GetMainCount())
+	mainPack, mainExists := this.packages["main"]
+	var i int
 	for _, p := range this.mains {
-		pack[i] = p;
+		pack[i] = p
 		if merge && mainExists {
-			pack[i] = pack[i].Clone();
-			pack[i].Merge(mainPack);
+			pack[i] = pack[i].Clone()
+			pack[i].Merge(mainPack)
 		}
-			
-		i++;
+
+		i++
 	}
-	return;
+	return
 }
 
 func (this *GoPackageContainer) GetPackageNames() (packNames []string) {
-	var i int;
-	packNames = make([]string, len(this.packages));
+	var i int
+	packNames = make([]string, len(this.packages))
 	for name, _ := range this.packages {
-		packNames[i] = name;
-		i++;
+		packNames[i] = name
+		i++
 	}
-	return;
+	return
 }
 
 func (this *GoPackage) HasTestFiles() bool {
-	var hasTest bool = false;
+	var hasTest bool = false
 
 	this.Files.Do(func(e interface{}) {
 		if (e.(*GoFile)).IsTestFile {
-			hasTest = true;
+			hasTest = true
 		}
-	});
+	})
 
-	return hasTest;
+	return hasTest
 }
-

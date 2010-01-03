@@ -8,93 +8,94 @@
 package main
 
 import (
-	os "os";
-	"exec";
-	"flag";
-	"path";
-	"strings";
-	"container/vector";
-	"./godata";
-	"./logger";
+	os "os"
+	"exec"
+	"flag"
+	"path"
+	"strings"
+	"container/vector"
+	"./godata"
+	"./logger"
 )
 
 // ========== command line parameters ==========
 
-var flagLibrary *bool = flag.Bool("lib", false, "build all packages as librarys");
-var flagBuildAll *bool = flag.Bool("a", false, "build all executables");
-var flagTesting *bool = flag.Bool("t", false, "(not yet implemented) Build all tests");
-var flagSingleMainFile *bool = flag.Bool("single-main", false, "one main file per executable");
-var flagIncludeInvisible *bool = flag.Bool("include-hidden", false, "Include hidden directories");
-var flagOutputFileName *string = flag.String("o", "", "output file");
-var flagQuietMode *bool = flag.Bool("q", false, "only print warnings/errors");
-var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors");
-var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages");
-var flagIncludePaths *string = flag.String("I", "", "additional include paths");
-var flagClean *bool = flag.Bool("clean", false, "delete all temporary files");
-var flagRunExe *bool = flag.Bool("run", false, "run the created executable(s)");
+var flagLibrary *bool = flag.Bool("lib", false, "build all packages as librarys")
+var flagBuildAll *bool = flag.Bool("a", false, "build all executables")
+var flagTesting *bool = flag.Bool("t", false, "(not yet implemented) Build all tests")
+var flagSingleMainFile *bool = flag.Bool("single-main", false, "one main file per executable")
+var flagIncludeInvisible *bool = flag.Bool("include-hidden", false, "Include hidden directories")
+var flagOutputFileName *string = flag.String("o", "", "output file")
+var flagQuietMode *bool = flag.Bool("q", false, "only print warnings/errors")
+var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors")
+var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages")
+var flagIncludePaths *string = flag.String("I", "", "additional include paths")
+var flagClean *bool = flag.Bool("clean", false, "delete all temporary files")
+var flagRunExe *bool = flag.Bool("run", false, "run the created executable(s)")
 
 // ========== global (package) variables ==========
 
-var compilerBin string;
-var linkerBin string;
-var gopackBin string = "gopack";
-var compileErrors bool = false;
-var linkErrors bool = false;
-var rootPath string;
-var rootPathPerm int;
-var objExt string;
-var outputDirPrefix string;
-var goPackages *godata.GoPackageContainer;
+var compilerBin string
+var linkerBin string
+var gopackBin string = "gopack"
+var compileErrors bool = false
+var linkErrors bool = false
+var rootPath string
+var rootPathPerm int
+var objExt string
+var outputDirPrefix string
+var goPackages *godata.GoPackageContainer
 
 // ========== goFileVisitor ==========
 
 // this visitor looks for files with the extension .go
-type goFileVisitor struct {}
+type goFileVisitor struct{}
 
-	
+
 // implementation of the Visitor interface for the file walker
 func (v *goFileVisitor) VisitDir(path string, d *os.Dir) bool {
-	if path[strings.LastIndex(path, "/") + 1] == '.' {
-		return *flagIncludeInvisible;
+	if path[strings.LastIndex(path, "/")+1] == '.' {
+		return *flagIncludeInvisible
 	}
-	return true;
+	return true
 }
 
 func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 	// parse hidden directories?
-	if (path[strings.LastIndex(path, "/") + 1] == '.') && (!*flagIncludeInvisible) {
-		return;
+	if (path[strings.LastIndex(path, "/")+1] == '.') && (!*flagIncludeInvisible) {
+		return
 	}
 
 	if strings.HasSuffix(path, ".go") {
 		// include *_test.go files?
 		if strings.HasSuffix(path, "_test.go") && (!*flagTesting) {
-			return;
+			return
 		}
 
-		gf := godata.GoFile{path[len(rootPath)+1:len(path)], nil, false,
-			false, strings.HasSuffix(path, "_test.go"), nil, nil};
+		gf := godata.GoFile{path[len(rootPath)+1 : len(path)], nil, false,
+			false, strings.HasSuffix(path, "_test.go"), nil, nil,
+		}
 
 		if gf.IsTestFile {
-			gf.TestFunctions = new(vector.Vector);
-			gf.BenchmarkFunctions = new(vector.Vector);
+			gf.TestFunctions = new(vector.Vector)
+			gf.BenchmarkFunctions = new(vector.Vector)
 		}
 
-		gf.ParseFile(goPackages);
+		gf.ParseFile(goPackages)
 	}
 }
 
 // ========== (local) functions ==========
 
 func getObjDir() string {
-	return "";
+	return ""
 
 	// this doesn't work for 'import "./blub"' style imports
 	/*
-	if *flagTesting {
-		return "_test/";
-	}
-	return "_obj/";*/
+		if *flagTesting {
+			return "_test/";
+		}
+		return "_obj/";*/
 }
 
 
@@ -102,11 +103,11 @@ func getObjDir() string {
  Returns an argv array in a single string with spaces dividing the entries.
 */
 func getCommandline(argv []string) string {
-	var str string;
+	var str string
 	for _, s := range argv {
-		str += s + " ";
+		str += s + " "
 	}
-	return str[0:len(str)-1];
+	return str[0 : len(str)-1]
 }
 
 /*
@@ -116,17 +117,17 @@ func getCommandline(argv []string) string {
 */
 func readFiles(rootpath string) {
 	// path walker error channel
-	errorChannel := make(chan os.Error, 64);
+	errorChannel := make(chan os.Error, 64)
 
 	// visitor for the path walker
-	visitor := &goFileVisitor{};
-	
-	logger.Info("Parsing go file(s)...\n");
-	
-	path.Walk(rootpath, visitor, errorChannel);
-	
+	visitor := &goFileVisitor{}
+
+	logger.Info("Parsing go file(s)...\n")
+
+	path.Walk(rootpath, visitor, errorChannel)
+
 	if err, ok := <-errorChannel; ok {
-		logger.Error("Error while traversing directories: %s\n", err);
+		logger.Error("Error while traversing directories: %s\n", err)
 	}
 }
 
@@ -134,351 +135,365 @@ func readFiles(rootpath string) {
  Creates a main package and _testmain.go file for building a test application.
 */
 func createTestPackage() *godata.GoPackage {
-	var testFileSource string;
-	var testArrays string;
-	var testCalls string;
-	var benchCalls string;
-	var testGoFile *godata.GoFile;
-	var testPack *godata.GoPackage;
-	var testFile *os.File;
-	var err os.Error;
-	var pack *godata.GoPackage;
-	
-	testGoFile = new(godata.GoFile);
-	testPack = godata.NewGoPackage("main");
+	var testFileSource string
+	var testArrays string
+	var testCalls string
+	var benchCalls string
+	var testGoFile *godata.GoFile
+	var testPack *godata.GoPackage
+	var testFile *os.File
+	var err os.Error
+	var pack *godata.GoPackage
 
-	testGoFile.Filename = "_testmain.go";
-	testGoFile.Pack = testPack;
-	testGoFile.HasMain = true;
-	testGoFile.IsTestFile = true;
-	
-	testPack.OutputFile = "_testmain";
-	testPack.Files.Push(testGoFile);
+	testGoFile = new(godata.GoFile)
+	testPack = godata.NewGoPackage("main")
+
+	testGoFile.Filename = "_testmain.go"
+	testGoFile.Pack = testPack
+	testGoFile.HasMain = true
+	testGoFile.IsTestFile = true
+
+	testPack.OutputFile = "_testmain"
+	testPack.Files.Push(testGoFile)
 
 	// search for packages with _test.go files
 	for _, packName := range goPackages.GetPackageNames() {
-		pack, _ = goPackages.Get(packName);
+		pack, _ = goPackages.Get(packName)
 
 		if pack.HasTestFiles() {
-			testPack.Depends.Push(pack);
+			testPack.Depends.Push(pack)
 		}
 	}
 
 	if testPack.Depends.Len() == 0 {
-		logger.Error("No _test.go files found.\n");
-		os.Exit(1);
+		logger.Error("No _test.go files found.\n")
+		os.Exit(1)
 	}
 
 	// imports
-	testFileSource = 
+	testFileSource =
 		"package main\n" +
-		"\nimport \"testing\"\n" +
-		"import \"fmt\"\n";
+			"\nimport \"testing\"\n" +
+			"import \"fmt\"\n"
 
 	// will create an array per package with all the Test* and Benchmark* functions
 	// tests/benchmarks will be done for each package seperatly so that running
 	// the _testmain program will result in multiple PASS (or fail) outputs.
 	for ipack := range testPack.Depends.Iter() {
-		var tmpStr string;
-		var fnCount int = 0;
-		pack := (ipack.(*godata.GoPackage));
-		
-		testFileSource += "import \"" + pack.Name + "\"\n";
+		var tmpStr string
+		var fnCount int = 0
+		pack := (ipack.(*godata.GoPackage))
 
-		tmpStr = "var test_" + pack.Name + " = []testing.Test {\n";
+		testFileSource += "import \"" + pack.Name + "\"\n"
+
+		tmpStr = "var test_" + pack.Name + " = []testing.Test {\n"
 		for igf := range pack.Files.Iter() {
-			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename);
+			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename)
 			if (igf.(*godata.GoFile)).IsTestFile {
 				for istr := range (igf.(*godata.GoFile)).TestFunctions.Iter() {
-					tmpStr += "\ttesting.Test{ \"" + 
-						pack.Name + "." + istr.(string) + 
+					tmpStr += "\ttesting.Test{ \"" +
+						pack.Name + "." + istr.(string) +
 						"\", " +
 						pack.Name + "." + istr.(string) +
-						" },\n";
-					fnCount++;
+						" },\n"
+					fnCount++
 				}
 			}
 		}
-		tmpStr += "}\n\n";
+		tmpStr += "}\n\n"
 
 		if fnCount > 0 {
-			testCalls += 
+			testCalls +=
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
-				"\ttesting.Main(test_" + pack.Name + ");\n";
-			testArrays += tmpStr;
+					"\ttesting.Main(test_" + pack.Name + ");\n"
+			testArrays += tmpStr
 		}
 
-		fnCount = 0;
-		tmpStr = "var bench_" + pack.Name + " = []testing.Benchmark {\n";
+		fnCount = 0
+		tmpStr = "var bench_" + pack.Name + " = []testing.Benchmark {\n"
 		for igf := range pack.Files.Iter() {
 			if (igf.(*godata.GoFile)).IsTestFile {
 				for istr := range (igf.(*godata.GoFile)).BenchmarkFunctions.Iter() {
-					tmpStr += "\ttesting.Benchmark{ \"" + 
-						pack.Name + "." + istr.(string) + 
+					tmpStr += "\ttesting.Benchmark{ \"" +
+						pack.Name + "." + istr.(string) +
 						"\", " +
 						pack.Name + "." + istr.(string) +
-						" },\n";
-					fnCount++;
+						" },\n"
+					fnCount++
 				}
 			}
 		}
-		tmpStr += "}\n\n";
+		tmpStr += "}\n\n"
 
 		if fnCount > 0 {
 			benchCalls +=
 				"\tfmt.Println(\"Benchmarking " + pack.Name + ":\");\n" +
-				"\ttesting.RunBenchmarks(bench_" + pack.Name + ");\n";
-			testArrays += tmpStr;
+					"\ttesting.RunBenchmarks(bench_" + pack.Name + ");\n"
+			testArrays += tmpStr
 		}
 	}
 
-	testFileSource += "\n" + testArrays;
-	
+	testFileSource += "\n" + testArrays
+
 	// func main()
 	testFileSource +=
 		"\nfunc main() {\n" +
-		testCalls +
-		benchCalls +
-		"}\n";
+			testCalls +
+			benchCalls +
+			"}\n"
 
-	testFile, err = os.Open(testGoFile.Filename, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0666);
+	testFile, err = os.Open(testGoFile.Filename, os.O_CREAT|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
-		logger.Error("Could not create %s: %s\n", testGoFile.Filename, err);
-		os.Exit(1);
+		logger.Error("Could not create %s: %s\n", testGoFile.Filename, err)
+		os.Exit(1)
 	}
-	testFile.WriteString(testFileSource);
+	testFile.WriteString(testFileSource)
 
-	testFile.Close();
+	testFile.Close()
 
-	return testPack;
+	return testPack
 }
 
 /*
  The compile method will run the compiler for every package it has found,
- starting with the main package. 
+ starting with the main package.
  Returns true if compiled successfully.
 */
 func compile(pack *godata.GoPackage) bool {
-	var argc int;
-	var argv []string;
-	var argvFilled int;
-	var objDir = ""; //outputDirPrefix + getObjDir();
+	var argc int
+	var argv []string
+	var argvFilled int
+	var objDir = "" //outputDirPrefix + getObjDir();
 
 	// sanity check
 	if pack.HasErrors || pack.Compiled {
-		logger.Debug("%s already compiled. This should not happen.\n");
+		logger.Debug("%s already compiled. This should not happen.\n")
 	}
 
 	// check for recursive dependencies
 	if pack.InProgress {
-		logger.Error("Found a recurisve dependency in %s. This is not supported in Go.\n", pack.Name);
-		pack.HasErrors = true;
-		pack.InProgress = false;
-		return false;
+		logger.Error("Found a recurisve dependency in %s. This is not supported in Go.\n", pack.Name)
+		pack.HasErrors = true
+		pack.InProgress = false
+		return false
 	}
 
-	pack.InProgress = true;
+	pack.InProgress = true
 
-	
+
 	// first compile all dependencies
 	//pack.Depends.Do(func(e interface{}) {
 	for idep := range pack.Depends.Iter() {
-		dep := idep.(*godata.GoPackage);
+		dep := idep.(*godata.GoPackage)
 		if dep.HasErrors {
-			pack.HasErrors = true;
-			pack.InProgress = false;
-			return false;
+			pack.HasErrors = true
+			pack.InProgress = false
+			return false
 		}
 
 		if !dep.Compiled &&
-			(dep.Type == godata.LOCAL_PACKAGE || 
-			dep.Type == godata.UNKNOWN_PACKAGE && dep.Files.Len() > 0) {
+			(dep.Type == godata.LOCAL_PACKAGE ||
+				dep.Type == godata.UNKNOWN_PACKAGE && dep.Files.Len() > 0) {
 			if !compile(dep) {
-				pack.HasErrors = true;
-				pack.InProgress = false;
-				return false;
+				pack.HasErrors = true
+				pack.InProgress = false
+				return false
 			}
 		}
 	}
 
 	// check if this package has any files (if not -> error)
 	if pack.Files.Len() == 0 && pack.Type == godata.LOCAL_PACKAGE {
-		logger.Error("No files found for package %s.\n", pack.Name);
-		os.Exit(1);
+		logger.Error("No files found for package %s.\n", pack.Name)
+		os.Exit(1)
 	}
 
 	// if the outputDirPrefix points to something, subdirectories need
 	// to be created if there are any
-	outputFile := objDir + pack.OutputFile;
+	outputFile := objDir + pack.OutputFile
 	if strings.Index(outputFile, "/") != -1 {
-		path := outputFile[0:strings.LastIndex(outputFile, "/")];
-		dir, err := os.Stat(path);
+		path := outputFile[0:strings.LastIndex(outputFile, "/")]
+		dir, err := os.Stat(path)
 		if err != nil {
-			err = os.MkdirAll(path, rootPathPerm);
+			err = os.MkdirAll(path, rootPathPerm)
 			if err != nil {
-				logger.Error("Could not create output path %s: %s\n", path, err);
-				os.Exit(1);
+				logger.Error("Could not create output path %s: %s\n", path, err)
+				os.Exit(1)
 			}
 		} else if !dir.IsDirectory() {
-			logger.Error("File found in %s instead of a directory.\n", path);
-			os.Exit(1);
+			logger.Error("File found in %s instead of a directory.\n", path)
+			os.Exit(1)
 		}
 	}
-		
+
 	// construct compiler command line arguments
-	if (pack.Name != "main") {
-		logger.Info("Compiling %s...\n", pack.Name);
+	if pack.Name != "main" {
+		logger.Info("Compiling %s...\n", pack.Name)
 	} else {
-		logger.Info("Compiling %s (%s)...\n", pack.Name, pack.OutputFile);
+		logger.Info("Compiling %s (%s)...\n", pack.Name, pack.OutputFile)
 	}
-	
-	argc = pack.Files.Len() + 3;
+
+	argc = pack.Files.Len() + 3
 	if *flagIncludePaths != "" {
-		argc += 2;
+		argc += 2
 	}
 	if pack.NeedsLocalSearchPath() || objDir != "" {
-		argc += 2;
+		argc += 2
 	}
-	argv = make([]string, argc);
+	argv = make([]string, argc)
 
-	argv[argvFilled] = compilerBin; argvFilled++;
-	argv[argvFilled] = "-o"; argvFilled++;
-	argv[argvFilled] = objDir + pack.OutputFile + objExt; argvFilled++;
+	argv[argvFilled] = compilerBin
+	argvFilled++
+	argv[argvFilled] = "-o"
+	argvFilled++
+	argv[argvFilled] = objDir + pack.OutputFile + objExt
+	argvFilled++
 
 	if *flagIncludePaths != "" {
-		argv[argvFilled] = "-I"; argvFilled++;
-		argv[argvFilled] = *flagIncludePaths; argvFilled++;
+		argv[argvFilled] = "-I"
+		argvFilled++
+		argv[argvFilled] = *flagIncludePaths
+		argvFilled++
 	}
 
 	if pack.NeedsLocalSearchPath() || objDir != "" {
-		argv[argvFilled] = "-I"; argvFilled++;
+		argv[argvFilled] = "-I"
+		argvFilled++
 		if objDir != "" {
-			argv[argvFilled] = objDir;
+			argv[argvFilled] = objDir
 		} else {
-			argv[argvFilled] = ".";
+			argv[argvFilled] = "."
 		}
-		argvFilled++;
+		argvFilled++
 	}
 
-	for i := 0; i < pack.Files.Len(); i++  {
-		gf := pack.Files.At(i).(*godata.GoFile);
-		argv[argvFilled] = gf.Filename;
-		argvFilled++;
+	for i := 0; i < pack.Files.Len(); i++ {
+		gf := pack.Files.At(i).(*godata.GoFile)
+		argv[argvFilled] = gf.Filename
+		argvFilled++
 	}
 
-	logger.Debug("%s\n", getCommandline(argv[0:argvFilled]));
-	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), exec.DevNull, 
-		exec.PassThrough, exec.PassThrough);
+	logger.Debug("%s\n", getCommandline(argv[0:argvFilled]))
+	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), exec.DevNull,
+		exec.PassThrough, exec.PassThrough)
 	if err != nil {
-		logger.Error("%s\n", err);
-		os.Exit(1);
+		logger.Error("%s\n", err)
+		os.Exit(1)
 	}
 
-	waitmsg, err := cmd.Wait(0);
+	waitmsg, err := cmd.Wait(0)
 	if err != nil {
-		logger.Error("Compiler execution error (%s), aborting compilation.\n", err);
-		os.Exit(1);
+		logger.Error("Compiler execution error (%s), aborting compilation.\n", err)
+		os.Exit(1)
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		pack.HasErrors = true;
-		pack.InProgress = false;
-		return false;
+		pack.HasErrors = true
+		pack.InProgress = false
+		return false
 	}
-	
-	// it should now be compiled
-	pack.Compiled = true;
-	pack.InProgress = false;
 
-	return true;
+	// it should now be compiled
+	pack.Compiled = true
+	pack.InProgress = false
+
+	return true
 }
 
 /*
  Calls the linker for the main file, which should be called "main.(5|6|8)".
 */
 func link(pack *godata.GoPackage) bool {
-	var argc int;
-	var argv []string;
-	var argvFilled int;
-	var objDir string = ""; //outputDirPrefix + getObjDir();
+	var argc int
+	var argv []string
+	var argvFilled int
+	var objDir string = "" //outputDirPrefix + getObjDir();
 
 	// build the command line for the linker
-	argc = 4;
+	argc = 4
 	if *flagIncludePaths != "" {
-		argc += 2;
+		argc += 2
 	}
 	if pack.NeedsLocalSearchPath() {
-		argc += 2;
+		argc += 2
 	}
 
-	argv = make([]string, argc);
-	
-	argv[argvFilled] = linkerBin; argvFilled++;
-	argv[argvFilled] = "-o"; argvFilled++;
-	argv[argvFilled] = outputDirPrefix + pack.OutputFile; argvFilled++;
+	argv = make([]string, argc)
+
+	argv[argvFilled] = linkerBin
+	argvFilled++
+	argv[argvFilled] = "-o"
+	argvFilled++
+	argv[argvFilled] = outputDirPrefix + pack.OutputFile
+	argvFilled++
 	if *flagIncludePaths != "" {
-		argv[argvFilled] = "-L"; argvFilled++;
-		argv[argvFilled] = *flagIncludePaths; argvFilled++;
+		argv[argvFilled] = "-L"
+		argvFilled++
+		argv[argvFilled] = *flagIncludePaths
+		argvFilled++
 	}
 	if pack.NeedsLocalSearchPath() {
-		argv[argvFilled] = "-L"; argvFilled++;
+		argv[argvFilled] = "-L"
+		argvFilled++
 		if objDir != "" {
-			argv[argvFilled] = objDir;
+			argv[argvFilled] = objDir
 		} else {
-			argv[argvFilled] = ".";
+			argv[argvFilled] = "."
 		}
-		argvFilled++;
+		argvFilled++
 	}
-	argv[argvFilled] = objDir + pack.OutputFile + objExt; argvFilled++;
+	argv[argvFilled] = objDir + pack.OutputFile + objExt
+	argvFilled++
 
-	logger.Info("Linking %s...\n", argv[2]);
-	logger.Debug("%s\n", getCommandline(argv));
+	logger.Info("Linking %s...\n", argv[2])
+	logger.Debug("%s\n", getCommandline(argv))
 
 	cmd, err := exec.Run(linkerBin, argv, os.Environ(),
-		exec.DevNull, exec.PassThrough, exec.PassThrough);
+		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
-		logger.Error("%s\n", err);
-		os.Exit(1);
+		logger.Error("%s\n", err)
+		os.Exit(1)
 	}
-	waitmsg, err := cmd.Wait(0);
+	waitmsg, err := cmd.Wait(0)
 	if err != nil {
-		logger.Error("Linker execution error (%s), aborting compilation.\n", err);
-		os.Exit(1);
+		logger.Error("Linker execution error (%s), aborting compilation.\n", err)
+		os.Exit(1)
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		logger.Error("Linker returned with errors, aborting.\n");
-		return false;
+		logger.Error("Linker returned with errors, aborting.\n")
+		return false
 	}
-	return true;
+	return true
 }
 
 func packLib(pack *godata.GoPackage) {
-	var objDir string = ""; //outputDirPrefix + getObjDir();
-	logger.Info("Creating %s.a...\n", pack.Name);
+	var objDir string = "" //outputDirPrefix + getObjDir();
+	logger.Info("Creating %s.a...\n", pack.Name)
 
 	argv := []string{
 		gopackBin,
 		"crg", // create new go archive
 		outputDirPrefix + pack.Name + ".a",
-		objDir + pack.Name + objExt};
-
-	logger.Debug("%s\n", getCommandline(argv));
-	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
-		exec.DevNull, exec.PassThrough, exec.PassThrough);
-	if err != nil {
-		logger.Error("%s\n", err);
-		os.Exit(1);
+		objDir + pack.Name + objExt,
 	}
-	waitmsg, err := cmd.Wait(0);
+
+	logger.Debug("%s\n", getCommandline(argv))
+	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
+		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
-		logger.Error("gopack execution error (%s), aborting.\n", err);
-		os.Exit(1);
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}
+	waitmsg, err := cmd.Wait(0)
+	if err != nil {
+		logger.Error("gopack execution error (%s), aborting.\n", err)
+		os.Exit(1)
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		logger.Error("gopack returned with errors, aborting.\n");
-		os.Exit(waitmsg.ExitStatus());
+		logger.Error("gopack returned with errors, aborting.\n")
+		os.Exit(waitmsg.ExitStatus())
 	}
 }
 
@@ -488,46 +503,46 @@ func packLib(pack *godata.GoPackage) {
 func buildExecutable() {
 	// check if there's a main package:
 	if goPackages.GetMainCount() == 0 {
-		logger.Error("No main package found.\n");
-		os.Exit(1);
+		logger.Error("No main package found.\n")
+		os.Exit(1)
 	}
 
 	// multiple main, no command file from command line and no -a -> error
 	if (goPackages.GetMainCount() > 1) && (flag.NArg() == 0) && !*flagBuildAll {
-		logger.Error("Multiple files found with main function.\n");
-		logger.ErrorContinue("Please specify one or more as command line parameter or\n");
-		logger.ErrorContinue("run gobuild with -a. Available main files are:\n");
+		logger.Error("Multiple files found with main function.\n")
+		logger.ErrorContinue("Please specify one or more as command line parameter or\n")
+		logger.ErrorContinue("run gobuild with -a. Available main files are:\n")
 		for _, fn := range goPackages.GetMainFilenames() {
-			logger.ErrorContinue("\t %s\n", fn);
+			logger.ErrorContinue("\t %s\n", fn)
 		}
-		os.Exit(1);
+		os.Exit(1)
 	}
-	
+
 	// compile all needed packages
 	if flag.NArg() > 0 {
 		for _, fn := range flag.Args() {
-			mainPack, exists := goPackages.GetMain(fn, !*flagSingleMainFile);
+			mainPack, exists := goPackages.GetMain(fn, !*flagSingleMainFile)
 			if !exists {
-				logger.Error("File %s not found.\n", fn);
-				return; // or os.Exit?
+				logger.Error("File %s not found.\n", fn)
+				return // or os.Exit?
 			}
 
 			if compile(mainPack) {
 				// link everything together
-				linkErrors = !link(mainPack) || linkErrors;
+				linkErrors = !link(mainPack) || linkErrors
 			} else {
-				logger.Error("Can't link executable because of compile errors.\n");
-				compileErrors = true;
+				logger.Error("Can't link executable because of compile errors.\n")
+				compileErrors = true
 			}
 		}
 	} else {
 		for _, mainPack := range goPackages.GetMainPackages(!*flagSingleMainFile) {
 
 			if compile(mainPack) {
-				linkErrors = !link(mainPack) || linkErrors;
+				linkErrors = !link(mainPack) || linkErrors
 			} else {
-				logger.Error("Can't link executable because of compile errors.\n");
-				compileErrors = true;
+				logger.Error("Can't link executable because of compile errors.\n")
+				compileErrors = true
 			}
 		}
 	}
@@ -539,20 +554,20 @@ func buildExecutable() {
  command line parameters.
 */
 func buildLibrary() {
-	var packNames []string;
-	var pack *godata.GoPackage;
-	var exists bool;
+	var packNames []string
+	var pack *godata.GoPackage
+	var exists bool
 
 	if goPackages.GetPackageCount() == 0 {
-		logger.Warn("No packages found to build.\n");
-		return;
+		logger.Warn("No packages found to build.\n")
+		return
 	}
 
 	// check for command line parameters
 	if flag.NArg() > 0 {
-		packNames = flag.Args();
+		packNames = flag.Args()
 	} else {
-		packNames = goPackages.GetPackageNames();
+		packNames = goPackages.GetPackageNames()
 	}
 
 
@@ -560,33 +575,33 @@ func buildLibrary() {
 	for _, name := range packNames {
 
 		if name == "main" {
-			continue; // don't make this into a library
+			continue // don't make this into a library
 		}
-		
-		pack, exists = goPackages.Get(name);
+
+		pack, exists = goPackages.Get(name)
 		if !exists {
-			logger.Error("Package %s doesn't exist.\n", name);
-			continue; // or exit?
+			logger.Error("Package %s doesn't exist.\n", name)
+			continue // or exit?
 		}
 
 		// don't compile remote packages or packages without files
 		if pack.Type == godata.REMOTE_PACKAGE || pack.Files.Len() == 0 {
-			continue;
+			continue
 		}
-		
+
 		// these packages come from invalid/unhandled imports
 		if pack.Files.Len() == 0 {
-			logger.Debug("Skipping package %s, no files to compile.\n", pack.Name);
-			continue;
+			logger.Debug("Skipping package %s, no files to compile.\n", pack.Name)
+			continue
 		}
 
 		if !pack.Compiled {
-			logger.Debug("Building %s...\n", pack.Name);
+			logger.Debug("Building %s...\n", pack.Name)
 			if compile(pack) {
-				packLib(pack);
+				packLib(pack)
 			} else {
-				logger.Error("Can't create library because of compile errors.\n");
-				compileErrors = true;
+				logger.Error("Can't create library because of compile errors.\n")
+				compileErrors = true
 			}
 		}
 	}
@@ -594,54 +609,54 @@ func buildLibrary() {
 
 func buildTestExecutable() {
 	// this will create a file called "_testmain.go"
-	testPack := createTestPackage();
-	
+	testPack := createTestPackage()
+
 	if compile(testPack) {
-		linkErrors = !link(testPack) || linkErrors;
+		linkErrors = !link(testPack) || linkErrors
 	} else {
-		logger.Error("Can't link executable because of compile errors.\n");
-		compileErrors = true;
+		logger.Error("Can't link executable because of compile errors.\n")
+		compileErrors = true
 	}
 
 	// delete temporary _testmain.go file
-	os.Remove("_testmain.go");
+	os.Remove("_testmain.go")
 }
 
 /*
  This function does exactly the same as "make clean".
 */
 func clean() {
-	bashBin, err := exec.LookPath("bash");
+	bashBin, err := exec.LookPath("bash")
 	if err != nil {
-		logger.Error("Need bash to clean.\n");
-		os.Exit(127);
+		logger.Error("Need bash to clean.\n")
+		os.Exit(127)
 	}
 
-	argv := []string{bashBin, "-c", "commandhere"};
+	argv := []string{bashBin, "-c", "commandhere"}
 
 	if *flagVerboseMode {
-		argv[2] = "rm -rfv *.[568]";
+		argv[2] = "rm -rfv *.[568]"
 	} else {
-		argv[2] = "rm -rf *.[568]";
+		argv[2] = "rm -rf *.[568]"
 	}
-	
-	logger.Info("Running: %v\n", argv[2:]);
+
+	logger.Info("Running: %v\n", argv[2:])
 
 	cmd, err := exec.Run(bashBin, argv, os.Environ(),
-		exec.DevNull, exec.PassThrough, exec.PassThrough);
+		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
-		logger.Error("%s\n", err);
-		os.Exit(1);
+		logger.Error("%s\n", err)
+		os.Exit(1)
 	}
-	waitmsg, err := cmd.Wait(0);
+	waitmsg, err := cmd.Wait(0)
 	if err != nil {
-		logger.Error("Couldn't delete files: %s\n", err);
-		os.Exit(1);
+		logger.Error("Couldn't delete files: %s\n", err)
+		os.Exit(1)
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		logger.Error("rm returned with errors.\n");
-		os.Exit(waitmsg.ExitStatus());
+		logger.Error("rm returned with errors.\n")
+		os.Exit(waitmsg.ExitStatus())
 	}
 }
 
@@ -649,130 +664,130 @@ func clean() {
 // Returns the bigger number.
 func max(a, b int) int {
 	if a > b {
-		return a;
+		return a
 	}
-	return b;
+	return b
 }
 
 func main() {
-	var err os.Error;
-	var rootPathDir *os.Dir;
+	var err os.Error
+	var rootPathDir *os.Dir
 
 	// parse command line arguments
-	flag.Parse();
+	flag.Parse()
 
 	if *flagQuieterMode {
-		logger.SetVerbosityLevel(logger.ERROR);
+		logger.SetVerbosityLevel(logger.ERROR)
 	} else if *flagQuietMode {
-		logger.SetVerbosityLevel(logger.WARN);
+		logger.SetVerbosityLevel(logger.WARN)
 	} else if *flagVerboseMode {
-		logger.SetVerbosityLevel(logger.DEBUG);
+		logger.SetVerbosityLevel(logger.DEBUG)
 	}
 
 	if *flagClean {
-		clean();
-		os.Exit(0);
+		clean()
+		os.Exit(0)
 	}
-	
+
 	// get the compiler/linker executable
 	switch os.Getenv("GOARCH") {
 	case "amd64":
-		compilerBin = "6g";
-		linkerBin = "6l";
-		objExt = ".6";
+		compilerBin = "6g"
+		linkerBin = "6l"
+		objExt = ".6"
 	case "386":
-		compilerBin = "8g";
-		linkerBin = "8l";
-		objExt = ".8";
+		compilerBin = "8g"
+		linkerBin = "8l"
+		objExt = ".8"
 	case "arm":
-		compilerBin = "5g";
-		linkerBin = "5l";
-		objExt = ".5";
+		compilerBin = "5g"
+		linkerBin = "5l"
+		objExt = ".5"
 	default:
-		logger.Error("Please specify a valid GOARCH (amd64/386/arm).\n");
-		os.Exit(1);		
+		logger.Error("Please specify a valid GOARCH (amd64/386/arm).\n")
+		os.Exit(1)
 	}
 
 	// get the complete path to the compiler/linker
-	compilerBin, err = exec.LookPath(compilerBin);
+	compilerBin, err = exec.LookPath(compilerBin)
 	if err != nil {
-		logger.Error("Could not find compiler %s: %s\n", compilerBin, err);
-		os.Exit(127);
+		logger.Error("Could not find compiler %s: %s\n", compilerBin, err)
+		os.Exit(127)
 	}
-	linkerBin, err = exec.LookPath(linkerBin);
+	linkerBin, err = exec.LookPath(linkerBin)
 	if err != nil {
-		logger.Error("Could not find linker %s: %s\n", linkerBin, err);
-		os.Exit(127);
+		logger.Error("Could not find linker %s: %s\n", linkerBin, err)
+		os.Exit(127)
 	}
-	gopackBin, err = exec.LookPath(gopackBin);
+	gopackBin, err = exec.LookPath(gopackBin)
 	if err != nil {
-		logger.Error("Could not find gopack executable (%s): %s\n", gopackBin, err);
-		os.Exit(127);
+		logger.Error("Could not find gopack executable (%s): %s\n", gopackBin, err)
+		os.Exit(127)
 	}
-	
+
 	// get the root path from where the application was called
 	// and its permissions (used for subdirectories)
 	if rootPath, err = os.Getwd(); err != nil {
-		logger.Error("Could not get the root path: %s\n", err);
-		os.Exit(1);
+		logger.Error("Could not get the root path: %s\n", err)
+		os.Exit(1)
 	}
 	if rootPathDir, err = os.Stat(rootPath); err != nil {
-		logger.Error("Could not read the root path: %s\n", err);
-		os.Exit(1);
+		logger.Error("Could not read the root path: %s\n", err)
+		os.Exit(1)
 	}
-	rootPathPerm = rootPathDir.Permission();
+	rootPathPerm = rootPathDir.Permission()
 
 	// create the package container
-	goPackages = godata.NewGoPackageContainer();
+	goPackages = godata.NewGoPackageContainer()
 
 	// check if -o with path
 	if *flagOutputFileName != "" {
-		dir, err := os.Stat(*flagOutputFileName);
+		dir, err := os.Stat(*flagOutputFileName)
 		if err != nil {
 			// doesn't exist? try to make it if it's a path
 			if (*flagOutputFileName)[len(*flagOutputFileName)-1] == '/' {
-				err = os.MkdirAll(*flagOutputFileName, rootPathPerm);
+				err = os.MkdirAll(*flagOutputFileName, rootPathPerm)
 				if err == nil {
-					outputDirPrefix = *flagOutputFileName;
+					outputDirPrefix = *flagOutputFileName
 				}
 			} else {
-				godata.DefaultOutputFileName = *flagOutputFileName;
+				godata.DefaultOutputFileName = *flagOutputFileName
 			}
 		} else if dir.IsDirectory() {
 			if (*flagOutputFileName)[len(*flagOutputFileName)-1] == '/' {
-				outputDirPrefix = *flagOutputFileName;
+				outputDirPrefix = *flagOutputFileName
 			} else {
-				outputDirPrefix = *flagOutputFileName + "/";
+				outputDirPrefix = *flagOutputFileName + "/"
 			}
 		} else {
-			godata.DefaultOutputFileName = *flagOutputFileName;
+			godata.DefaultOutputFileName = *flagOutputFileName
 		}
 
 		// make path to output file
 		if outputDirPrefix == "" && strings.Index(*flagOutputFileName, "/") != -1 {
-			err = os.MkdirAll((*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")], rootPathPerm);
+			err = os.MkdirAll((*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")], rootPathPerm)
 			if err != nil {
 				logger.Error("Could not create %s: %s\n",
 					(*flagOutputFileName)[0:strings.LastIndex(*flagOutputFileName, "/")],
-					err);
+					err)
 			}
 		}
 
 	}
 
 	// read all go files in the current path + subdirectories and parse them
-	readFiles(rootPath);
+	readFiles(rootPath)
 
 	if *flagTesting {
-		buildTestExecutable();
+		buildTestExecutable()
 	} else if *flagLibrary {
-		buildLibrary();
+		buildLibrary()
 	} else {
-		buildExecutable();
+		buildExecutable()
 	}
 
 	// make sure exit status is != 0 if there were compiler/linker errors
 	if compileErrors || linkErrors {
-		os.Exit(1);
+		os.Exit(1)
 	}
 }
