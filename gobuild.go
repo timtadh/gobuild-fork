@@ -31,6 +31,7 @@ var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors");
 var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages");
 var flagIncludePaths *string = flag.String("I", "", "additional include paths");
 var flagClean *bool = flag.Bool("clean", false, "delete all temporary files");
+var flagRunExe *bool = flag.Bool("run", false, "run the created executable(s)");
 
 // ========== global (package) variables ==========
 
@@ -163,12 +164,20 @@ func createTestPackage() *godata.GoPackage {
 		}
 	}
 
+	if testPack.Depends.Len() == 0 {
+		logger.Error("No _test.go files found.\n");
+		os.Exit(1);
+	}
+
 	// imports
 	testFileSource = 
 		"package main\n" +
-		"\nimport \"testing\"\n";
+		"\nimport \"testing\"\n" +
+		"import \"fmt\"\n";
 
-	//testPack.Depends.Do(func(e interface{}) {
+	// will create an array per package with all the Test* and Benchmark* functions
+	// tests/benchmarks will be done for each package seperatly so that running
+	// the _testmain program will result in multiple PASS (or fail) outputs.
 	for ipack := range testPack.Depends.Iter() {
 		var tmpStr string;
 		var fnCount int = 0;
@@ -193,7 +202,9 @@ func createTestPackage() *godata.GoPackage {
 		tmpStr += "}\n\n";
 
 		if fnCount > 0 {
-			testCalls += "\ttesting.Main(test_" + pack.Name + ");\n";
+			testCalls += 
+				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
+				"\ttesting.Main(test_" + pack.Name + ");\n";
 			testArrays += tmpStr;
 		}
 
@@ -214,7 +225,9 @@ func createTestPackage() *godata.GoPackage {
 		tmpStr += "}\n\n";
 
 		if fnCount > 0 {
-			benchCalls += "\ttesting.RunBenchmarks(bench_" + pack.Name + ");\n";
+			benchCalls +=
+				"\tfmt.Println(\"Benchmarking " + pack.Name + ":\");\n" +
+				"\ttesting.RunBenchmarks(bench_" + pack.Name + ");\n";
 			testArrays += tmpStr;
 		}
 	}
@@ -233,9 +246,9 @@ func createTestPackage() *godata.GoPackage {
 		logger.Error("Could not create %s: %s\n", testGoFile.Filename, err);
 		os.Exit(1);
 	}
-	defer testFile.Close();
-
 	testFile.WriteString(testFileSource);
+
+	testFile.Close();
 
 	return testPack;
 }
