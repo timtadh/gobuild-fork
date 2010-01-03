@@ -31,7 +31,9 @@ var flagQuieterMode *bool = flag.Bool("qq", false, "only print errors")
 var flagVerboseMode *bool = flag.Bool("v", false, "print debug messages")
 var flagIncludePaths *string = flag.String("I", "", "additional include paths")
 var flagClean *bool = flag.Bool("clean", false, "delete all temporary files")
-var flagRunExe *bool = flag.Bool("run", false, "run the created executable(s)")
+var flagRunExec *bool = flag.Bool("run", false, "run the created executable(s)")
+var flagMatch *string = flag.String("match", "", "regular expression to select tests to run")
+var flagBenchmarks *string = flag.String("benchmarks", "", "regular expression to select benchmarks to run")
 
 // ========== global (package) variables ==========
 
@@ -60,6 +62,7 @@ func (v *goFileVisitor) VisitDir(path string, d *os.Dir) bool {
 	return true
 }
 
+// implementation of the Visitor interface for the file walker
 func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 	// parse hidden directories?
 	if (path[strings.LastIndex(path, "/")+1] == '.') && (!*flagIncludeInvisible) {
@@ -87,6 +90,7 @@ func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 
 // ========== (local) functions ==========
 
+// unused right now, may be used later for a target directory for .[568] files
 func getObjDir() string {
 	return ""
 
@@ -144,6 +148,7 @@ func createTestPackage() *godata.GoPackage {
 	var testFile *os.File
 	var err os.Error
 	var pack *godata.GoPackage
+	var flagsDeleted bool = false
 
 	testGoFile = new(godata.GoFile)
 	testPack = godata.NewGoPackage("main")
@@ -174,7 +179,8 @@ func createTestPackage() *godata.GoPackage {
 	testFileSource =
 		"package main\n" +
 			"\nimport \"testing\"\n" +
-			"import \"fmt\"\n"
+			"import \"fmt\"\n" +
+			"import \"os\"\n"
 
 	// will create an array per package with all the Test* and Benchmark* functions
 	// tests/benchmarks will be done for each package seperatly so that running
@@ -207,6 +213,12 @@ func createTestPackage() *godata.GoPackage {
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
 					"\ttesting.Main(test_" + pack.Name + ");\n"
 			testArrays += tmpStr
+			
+			if !flagsDeleted {
+				// this is needed because testing.Main calls flags.Parse
+				// which would collide with previous calls to that function
+				testCalls += "\tos.Args = []string{}\n"
+			}
 		}
 
 		fnCount = 0
@@ -467,6 +479,34 @@ func link(pack *godata.GoPackage) bool {
 	return true
 }
 
+
+/*
+ Executes something. Used for the -run command line option.
+*/
+func runExec(argv []string) {
+	logger.Info("Executing %s:\n", argv[0]);
+	logger.Debug("%s\n", getCommandline(argv))
+	cmd, err := exec.Run(argv[0], argv, os.Environ(),
+		exec.PassThrough, exec.PassThrough, exec.PassThrough)
+	if err != nil {
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}
+	waitmsg, err := cmd.Wait(0)
+	if err != nil {
+		logger.Error("Executing %s failed: %s.\n", argv[0], err)
+		os.Exit(1)
+	}
+
+	if waitmsg.ExitStatus() != 0 {
+		os.Exit(waitmsg.ExitStatus());
+	}
+}
+
+
+/*
+ Creates a .a file for a single GoPackage
+*/
 func packLib(pack *godata.GoPackage) {
 	var objDir string = "" //outputDirPrefix + getObjDir();
 	logger.Info("Creating %s.a...\n", pack.Name)
@@ -497,10 +537,14 @@ func packLib(pack *godata.GoPackage) {
 	}
 }
 
+
 /*
  Build an executable from the given sources.
 */
 func buildExecutable() {
+	var executables []string
+	var execFilled int
+
 	// check if there's a main package:
 	if goPackages.GetMainCount() == 0 {
 		logger.Error("No main package found.\n")
@@ -520,6 +564,9 @@ func buildExecutable() {
 
 	// compile all needed packages
 	if flag.NArg() > 0 {
+		if *flagRunExec {
+			executables = make([]string, flag.NArg())
+		}
 		for _, fn := range flag.Args() {
 			mainPack, exists := goPackages.GetMain(fn, !*flagSingleMainFile)
 			if !exists {
@@ -529,20 +576,45 @@ func buildExecutable() {
 
 			if compile(mainPack) {
 				// link everything together
-				linkErrors = !link(mainPack) || linkErrors
+				if link(mainPack) {
+					if *flagRunExec {
+						executables[execFilled] = outputDirPrefix + mainPack.OutputFile
+						execFilled++
+					}
+				} else {
+					linkErrors = true
+				}
 			} else {
 				logger.Error("Can't link executable because of compile errors.\n")
 				compileErrors = true
 			}
 		}
 	} else {
+		if *flagRunExec {
+			executables = make([]string, goPackages.GetMainCount())
+		}
 		for _, mainPack := range goPackages.GetMainPackages(!*flagSingleMainFile) {
 
 			if compile(mainPack) {
-				linkErrors = !link(mainPack) || linkErrors
+				if link(mainPack) {
+					if *flagRunExec {
+						executables[execFilled] = outputDirPrefix + mainPack.OutputFile
+						execFilled++
+					}
+				} else {
+					linkErrors = true
+				}
 			} else {
 				logger.Error("Can't link executable because of compile errors.\n")
 				compileErrors = true
+			}
+		}
+	}
+
+	if *flagRunExec {
+		if !linkErrors {
+			for i := 0; i < execFilled; i++ {
+				runExec([]string{executables[i]})
 			}
 		}
 	}
@@ -607,6 +679,11 @@ func buildLibrary() {
 	}
 }
 
+/*
+ Creates a new file called _testmain.go and compiles/links it to _testmain.
+ If the -run command line option is given it will also run the tests. In this
+ case -benchmarks/-match/-v are also passed on.
+*/
 func buildTestExecutable() {
 	// this will create a file called "_testmain.go"
 	testPack := createTestPackage()
@@ -620,6 +697,41 @@ func buildTestExecutable() {
 
 	// delete temporary _testmain.go file
 	os.Remove("_testmain.go")
+
+	if *flagRunExec {
+		var argvFilled int
+		var argc int = 1
+		if *flagMatch != "" {
+			argc += 2
+		}
+		if *flagBenchmarks != "" {
+			argc += 2
+		}
+		if *flagVerboseMode {
+			argc++
+		}
+		argv := make([]string, argc)
+		argv[argvFilled] = outputDirPrefix + testPack.OutputFile
+		argvFilled++
+		if *flagMatch != "" {
+		        argv[argvFilled] = "-match"
+			argvFilled++
+			argv[argvFilled] = *flagMatch
+			argvFilled++
+		}
+		if *flagBenchmarks != "" {
+		        argv[argvFilled] = "-benchmarks"
+			argvFilled++
+			argv[argvFilled] = *flagBenchmarks
+			argvFilled++
+		}
+		if *flagVerboseMode {
+			argv[argvFilled] = "-v"
+			argvFilled++
+		}
+
+		runExec(argv)
+	}
 }
 
 /*
@@ -669,6 +781,9 @@ func max(a, b int) int {
 	return b
 }
 
+/*
+ Entry point. Used for setting some variables and parsing the command line.
+*/
 func main() {
 	var err os.Error
 	var rootPathDir *os.Dir
