@@ -14,8 +14,8 @@ install: $(OFILES)
 include $(GOROOT)/src/Make.cmd
 
 logger.$O:
-	$(GC) -o logger.$O logger/logger.go
+	$(QUOTED_GOBIN)/$(GC) -o logger.$O logger/logger.go
 
 godata.$O:
-	$(GC) -o godata.$O godata/gofile.go godata/gopackage.go
+	$(QUOTED_GOBIN)/$(GC) -o godata.$O godata/gofile.go godata/gopackage.go
 
