@@ -1,5 +1,5 @@
- - -t with no _test files -> error
- - -run parameter (for exe and -t)
+ - -t with package-name/file-name (build tests for this package/files only)
+ - -o with -t should also be useful for filenames
  - change root path if command line to main file is in a different (non-sub) directory
  - create (HTML) docs (without HTTP-server)
  - support for external librarys (run cgo and figure out include paths? might need gobuild.hint first)
