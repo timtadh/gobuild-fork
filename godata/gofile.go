@@ -146,16 +146,6 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 
 		}
 		return nil
-	case *ast.Package:
-		return v
-	case *ast.File:
-		return v
-	case *ast.BadDecl:
-		return v
-	case *ast.GenDecl:
-		return v
-	case *ast.Ident:
-		return nil
 	case *ast.FuncDecl:
 		if n.Recv == nil && n.Name.Value == "main" && v.file.Pack.Name == "main" {
 			v.file.HasMain = true
@@ -169,8 +159,14 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 			v.file.BenchmarkFunctions.Push(n.Name.Value)
 		}
 		return nil
+	case *ast.Package, *ast.File, *ast.BadDecl,
+		*ast.GenDecl, *ast.Ident, []ast.Decl:
+		return v
+
+
 	default:
-		return nil
+		return nil // makes parsing faster
+			   // this may cause some files to not parse correctly
 	}
 
 	return nil // unreachable

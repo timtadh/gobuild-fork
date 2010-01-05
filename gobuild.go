@@ -83,6 +83,7 @@ func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
 			gf.TestFunctions = new(vector.Vector)
 			gf.BenchmarkFunctions = new(vector.Vector)
 		}
+		logger.Debug("Parsing file: %s\n", path)
 
 		gf.ParseFile(goPackages)
 	}
