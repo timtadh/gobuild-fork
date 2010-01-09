@@ -278,11 +278,6 @@ func compile(pack *godata.GoPackage) bool {
 	var argvFilled int
 	var objDir = "" //outputDirPrefix + getObjDir();
 
-	// sanity check
-	if pack.HasErrors || pack.Compiled {
-		logger.Debug("%s already compiled. This should not happen.\n")
-	}
-
 	// check for recursive dependencies
 	if pack.InProgress {
 		logger.Error("Found a recurisve dependency in %s. This is not supported in Go.\n", pack.Name)
@@ -293,9 +288,7 @@ func compile(pack *godata.GoPackage) bool {
 
 	pack.InProgress = true
 
-
 	// first compile all dependencies
-	//pack.Depends.Do(func(e interface{}) {
 	for idep := range pack.Depends.Iter() {
 		dep := idep.(*godata.GoPackage)
 		if dep.HasErrors {
@@ -321,8 +314,8 @@ func compile(pack *godata.GoPackage) bool {
 		os.Exit(1)
 	}
 
-	// if the outputDirPrefix points to something, subdirectories need
-	// to be created if there are any
+	// if the outputDirPrefix points to something, subdirectories 
+	// need to be created if they don't already exist
 	outputFile := objDir + pack.OutputFile
 	if strings.Index(outputFile, "/") != -1 {
 		path := outputFile[0:strings.LastIndex(outputFile, "/")]
@@ -337,6 +330,14 @@ func compile(pack *godata.GoPackage) bool {
 			logger.Error("File found in %s instead of a directory.\n", path)
 			os.Exit(1)
 		}
+	}
+
+	// before compiling, remove any .a file
+	// this is done because the compiler/linker looks for .a files
+	// before it looks for .[568] files
+	
+	if err := os.Remove(outputFile + ".a"); err == nil {
+		logger.Debug("Removed file %s.a.\n", outputFile)
 	}
 
 	// construct compiler command line arguments
@@ -359,7 +360,7 @@ func compile(pack *godata.GoPackage) bool {
 	argvFilled++
 	argv[argvFilled] = "-o"
 	argvFilled++
-	argv[argvFilled] = objDir + pack.OutputFile + objExt
+	argv[argvFilled] = outputFile + objExt
 	argvFilled++
 
 	if *flagIncludePaths != "" {
