@@ -612,11 +612,9 @@ func buildExecutable() {
 		}
 	}
 
-	if *flagRunExec {
-		if !linkErrors {
-			for i := 0; i < execFilled; i++ {
-				runExec([]string{executables[i]})
-			}
+	if *flagRunExec && !linkErrors && !compileErrors {
+		for i := 0; i < execFilled; i++ {
+			runExec([]string{executables[i]})
 		}
 	}
 }
@@ -698,6 +696,10 @@ func buildTestExecutable() {
 
 	// delete temporary _testmain.go file
 	os.Remove("_testmain.go")
+
+	if compileErrors || linkErrors {
+		return
+	}
 
 	if *flagRunExec {
 		var argvFilled int
