@@ -217,8 +217,9 @@ func createTestPackage() *godata.GoPackage {
 			
 			if !flagsDeleted {
 				// this is needed because testing.Main calls flags.Parse
-				// which would collide with previous calls to that function
+				// which collides with previous calls to that function
 				testCalls += "\tos.Args = []string{}\n"
+				flagsDeleted = true
 			}
 		}
 
@@ -335,7 +336,6 @@ func compile(pack *godata.GoPackage) bool {
 	// before compiling, remove any .a file
 	// this is done because the compiler/linker looks for .a files
 	// before it looks for .[568] files
-	
 	if err := os.Remove(outputFile + ".a"); err == nil {
 		logger.Debug("Removed file %s.a.\n", outputFile)
 	}
