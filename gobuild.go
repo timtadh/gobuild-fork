@@ -51,39 +51,61 @@ var goPackages *godata.GoPackageContainer
 // ========== goFileVisitor ==========
 
 // this visitor looks for files with the extension .go
-type goFileVisitor struct{}
+type goFileVisitor struct{
+	rootpath string
+	realpath string
+	symname string
+}
 
 
 // implementation of the Visitor interface for the file walker
-func (v *goFileVisitor) VisitDir(path string, d *os.Dir) bool {
-	if path[strings.LastIndex(path, "/")+1] == '.' {
-		return *flagIncludeInvisible
+func (v *goFileVisitor) VisitDir(dirpath string, d *os.Dir) bool {
+	if strings.LastIndex(dirpath, "/") < len(dirpath)-1 {
+		if dirpath[strings.LastIndex(dirpath, "/")+1] == '.' {
+			return *flagIncludeInvisible
+		}
 	}
 	return true
 }
 
 // implementation of the Visitor interface for the file walker
-func (v *goFileVisitor) VisitFile(path string, d *os.Dir) {
+func (v *goFileVisitor) VisitFile(filepath string, d *os.Dir) {
 	// parse hidden directories?
-	if (path[strings.LastIndex(path, "/")+1] == '.') && (!*flagIncludeInvisible) {
+	if (filepath[strings.LastIndex(filepath, "/")+1] == '.') && (!*flagIncludeInvisible) {
 		return
 	}
 
-	if strings.HasSuffix(path, ".go") {
+	// check if this is a symlink
+	if dir, err := os.Stat(filepath); err == nil {
+		if dir.FollowedSymlink && dir.IsDirectory() {
+			readFiles(filepath)
+		}
+	} else {
+		logger.Warn("%s\n", err);
+	}
+
+	if strings.HasSuffix(filepath, ".go") {
 		// include *_test.go files?
-		if strings.HasSuffix(path, "_test.go") && (!*flagTesting) {
+		if strings.HasSuffix(filepath, "_test.go") && (!*flagTesting) {
 			return
 		}
 
-		gf := godata.GoFile{path[len(rootPath)+1 : len(path)], nil, false,
-			false, strings.HasSuffix(path, "_test.go"), nil, nil,
+		var gf godata.GoFile
+		if v.realpath != v.rootpath {
+			gf = godata.GoFile{v.symname + filepath[strings.LastIndex(filepath, "/"):],
+				nil, false, false, strings.HasSuffix(filepath, "_test.go"), nil, nil,
+			}
+		} else {
+			gf = godata.GoFile{filepath[len(v.realpath)+1 : len(filepath)], nil,
+				false,false, strings.HasSuffix(filepath, "_test.go"), nil, nil,
+			}
 		}
 
 		if gf.IsTestFile {
 			gf.TestFunctions = new(vector.Vector)
 			gf.BenchmarkFunctions = new(vector.Vector)
 		}
-		logger.Debug("Parsing file: %s\n", path)
+		logger.Debug("Parsing file: %s\n", filepath)
 
 		gf.ParseFile(goPackages)
 	}
@@ -121,15 +143,29 @@ func getCommandline(argv []string) string {
  and searches the main package files for the main function.
 */
 func readFiles(rootpath string) {
+	var realpath, symname string
 	// path walker error channel
 	errorChannel := make(chan os.Error, 64)
 
+	// check if this is a symlink
+	if dir, err := os.Stat(rootpath); err == nil {
+		if dir.FollowedSymlink {
+			realpath, _ = os.Readlink(rootpath)
+			if realpath[0] != '/' {
+				realpath = rootpath[0:strings.LastIndex(rootpath, "/")+1] + realpath
+			}
+			symname = rootpath[len(rootPath)+1:]
+		} else {
+			realpath = rootpath
+		}
+	} else {
+		logger.Warn("%s\n", err)
+	}
+
 	// visitor for the path walker
-	visitor := &goFileVisitor{}
+	visitor := &goFileVisitor{rootpath, realpath, symname}
 
-	logger.Info("Parsing go file(s)...\n")
-
-	path.Walk(rootpath, visitor, errorChannel)
+	path.Walk(visitor.realpath, visitor, errorChannel)
 
 	if err, ok := <-errorChannel; ok {
 		logger.Error("Error while traversing directories: %s\n", err)
@@ -667,14 +703,15 @@ func buildLibrary() {
 			continue
 		}
 
-		if !pack.Compiled {
-			logger.Debug("Building %s...\n", pack.Name)
-			if compile(pack) {
-				packLib(pack)
-			} else {
-				logger.Error("Can't create library because of compile errors.\n")
-				compileErrors = true
-			}
+		if !pack.Compiled && !pack.HasErrors {
+			compileErrors = !compile(pack) || compileErrors
+		}
+
+		if pack.HasErrors {
+			logger.Error("Can't create library because of compile errors.\n")
+			compileErrors = true
+		} else {
+			packLib(pack)
 		}
 	}
 }
@@ -895,6 +932,7 @@ func main() {
 	}
 
 	// read all go files in the current path + subdirectories and parse them
+	logger.Info("Parsing go file(s)...\n")
 	readFiles(rootPath)
 
 	if *flagTesting {
