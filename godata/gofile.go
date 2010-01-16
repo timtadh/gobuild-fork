@@ -28,7 +28,7 @@ func max(a, b int) int {
 // ================================
 
 type GoFile struct {
-	Filename           string         // file name with full path
+	Filename           string         // file name with relative path
 	Pack               *GoPackage     // the package this file belongs to
 	HasMain            bool           // main function found (only true for main package)
 	IsCGOFile          bool           // imports "C"
@@ -46,7 +46,10 @@ func (this *GoFile) ParseFile(packs *GoPackageContainer) (err os.Error) {
 	var packName string
 	var fileast *ast.File
 
-	fileast, err = parser.ParseFile(this.Filename, nil, 0)
+	if fileast, err = parser.ParseFile(this.Filename, nil, 0); err != nil {
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}	
 
 	packName = fileast.Name.String()
 
