@@ -147,16 +147,16 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 		}
 		return nil
 	case *ast.FuncDecl:
-		if n.Recv == nil && n.Name.Value == "main" && v.file.Pack.Name == "main" {
+		if n.Recv == nil && n.Name.String() == "main" && v.file.Pack.Name == "main" {
 			v.file.HasMain = true
 		} else if n.Recv == nil && v.file.IsTestFile &&
-			strings.HasPrefix(n.Name.Value, "Test") &&
+			strings.HasPrefix(n.Name.String(), "Test") &&
 			n.Body != nil {
-			v.file.TestFunctions.Push(n.Name.Value)
+			v.file.TestFunctions.Push(n.Name.String())
 		} else if n.Recv == nil && v.file.IsTestFile &&
-			strings.HasPrefix(n.Name.Value, "Benchmark") &&
+			strings.HasPrefix(n.Name.String(), "Benchmark") &&
 			n.Body != nil {
-			v.file.BenchmarkFunctions.Push(n.Name.Value)
+			v.file.BenchmarkFunctions.Push(n.Name.String())
 		}
 		return nil
 	case *ast.Package, *ast.File, *ast.BadDecl,
