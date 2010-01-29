@@ -46,7 +46,7 @@ func (this *GoFile) ParseFile(packs *GoPackageContainer) (err os.Error) {
 	var packName string
 	var fileast *ast.File
 
-	if fileast, err = parser.ParseFile(this.Filename, nil, 0); err != nil {
+	if fileast, err = parser.ParseFile(this.Filename, nil, nil, 0); err != nil {
 		logger.Error("%s\n", err)
 		os.Exit(1)
 	}	
