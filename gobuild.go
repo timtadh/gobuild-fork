@@ -226,10 +226,25 @@ func createTestPackage() *godata.GoPackage {
 		var tmpStr string
 		var fnCount int = 0
 		pack := (ipack.(*godata.GoPackage))
+		
+		// localPackVarName: contains the test functions, package name
+		// with '/' replaced by '_'
+		var localPackVarName string = strings.Map(func(rune int) int {
+			if rune == '/' {
+				return '_'
+			}
+			return rune;}, pack.Name)
+		// localPackName: package name without path/parent directories
+		var localPackName string
+		if strings.LastIndex(pack.Name, "/") >= 0 {
+			localPackName = pack.Name[strings.LastIndex(pack.Name, "/")+1:]
+		} else {
+			localPackName = pack.Name
+		}
 
 		testFileSource += "import \"" + pack.Name + "\"\n"
 
-		tmpStr = "var test_" + pack.Name + " = []testing.Test {\n"
+		tmpStr = "var test_" + localPackVarName + " = []testing.Test {\n"
 		for igf := range pack.Files.Iter() {
 			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename)
 			if (igf.(*godata.GoFile)).IsTestFile {
@@ -237,7 +252,7 @@ func createTestPackage() *godata.GoPackage {
 					tmpStr += "\ttesting.Test{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
-						pack.Name + "." + istr.(string) +
+						localPackName + "." + istr.(string) +
 						" },\n"
 					fnCount++
 				}
@@ -248,7 +263,7 @@ func createTestPackage() *godata.GoPackage {
 		if fnCount > 0 {
 			testCalls +=
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
-					"\ttesting.Main(test_" + pack.Name + ");\n"
+					"\ttesting.Main(test_" + localPackVarName + ");\n"
 			testArrays += tmpStr
 			
 			if !flagsDeleted {
@@ -260,14 +275,14 @@ func createTestPackage() *godata.GoPackage {
 		}
 
 		fnCount = 0
-		tmpStr = "var bench_" + pack.Name + " = []testing.Benchmark {\n"
+		tmpStr = "var bench_" + localPackVarName + " = []testing.Benchmark {\n"
 		for igf := range pack.Files.Iter() {
 			if (igf.(*godata.GoFile)).IsTestFile {
 				for istr := range (igf.(*godata.GoFile)).BenchmarkFunctions.Iter() {
 					tmpStr += "\ttesting.Benchmark{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
-						pack.Name + "." + istr.(string) +
+						localPackName + "." + istr.(string) +
 						" },\n"
 					fnCount++
 				}
@@ -278,7 +293,7 @@ func createTestPackage() *godata.GoPackage {
 		if fnCount > 0 {
 			benchCalls +=
 				"\tfmt.Println(\"Benchmarking " + pack.Name + ":\");\n" +
-					"\ttesting.RunBenchmarks(bench_" + pack.Name + ");\n"
+					"\ttesting.RunBenchmarks(bench_" + localPackVarName + ");\n"
 			testArrays += tmpStr
 		}
 	}
