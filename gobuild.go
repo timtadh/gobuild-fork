@@ -439,8 +439,8 @@ func compile(pack *godata.GoPackage) bool {
 	}
 
 	logger.Debug("%s\n", getCommandline(argv[0:argvFilled]))
-	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), exec.DevNull,
-		exec.PassThrough, exec.PassThrough)
+	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), rootPath,
+		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
 		logger.Error("%s\n", err)
 		os.Exit(1)
@@ -513,7 +513,7 @@ func link(pack *godata.GoPackage) bool {
 	logger.Info("Linking %s...\n", argv[2])
 	logger.Debug("%s\n", getCommandline(argv))
 
-	cmd, err := exec.Run(linkerBin, argv, os.Environ(),
+	cmd, err := exec.Run(linkerBin, argv, os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
 		logger.Error("%s\n", err)
@@ -539,7 +539,7 @@ func link(pack *godata.GoPackage) bool {
 func runExec(argv []string) {
 	logger.Info("Executing %s:\n", argv[0]);
 	logger.Debug("%s\n", getCommandline(argv))
-	cmd, err := exec.Run(argv[0], argv, os.Environ(),
+	cmd, err := exec.Run(argv[0], argv, os.Environ(), rootPath,
 		exec.PassThrough, exec.PassThrough, exec.PassThrough)
 	if err != nil {
 		logger.Error("%s\n", err)
@@ -572,7 +572,7 @@ func packLib(pack *godata.GoPackage) {
 	}
 
 	logger.Debug("%s\n", getCommandline(argv))
-	cmd, err := exec.Run(gopackBin, argv, os.Environ(),
+	cmd, err := exec.Run(gopackBin, argv, os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
 		logger.Error("%s\n", err)
@@ -810,7 +810,7 @@ func clean() {
 
 	logger.Info("Running: %v\n", argv[2:])
 
-	cmd, err := exec.Run(bashBin, argv, os.Environ(),
+	cmd, err := exec.Run(bashBin, argv, os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
 		logger.Error("%s\n", err)
