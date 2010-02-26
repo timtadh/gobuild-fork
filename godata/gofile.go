@@ -119,35 +119,33 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 	case *ast.ImportSpec:
 		var packName string
 		var packType int
-		for _, bl := range n.Path {
-			if (len(bl.Value) > 4) &&
-				(bl.Value[1] == '.') &&
-				(bl.Value[2] == '/') {
+		if (len(n.Path.Value) > 4) &&
+			(n.Path.Value[1] == '.') &&
+			(n.Path.Value[2] == '/') {
 
-				// local package found
-				packName = string(bl.Value[3 : len(bl.Value)-1])
-				packType = LOCAL_PACKAGE
-
-			} else {
-				packName = string(bl.Value[1 : len(bl.Value)-1])
-				packType = UNKNOWN_PACKAGE
-			}
-
-			dep, exists := v.packs.Get(packName)
-			if !exists {
-				dep = v.packs.AddNewPackage(packName)
-			} else if dep.Type == LOCAL_PACKAGE {
-				packType = LOCAL_PACKAGE
-			}
-
-			dep.Type = packType
-			v.file.Pack.Depends.Push(dep)
-
-			if string(bl.Value) == "\"C\"" {
-				v.file.IsCGOFile = true // not used yet
-			}
-
+			// local package found
+			packName = string(n.Path.Value[3 : len(n.Path.Value)-1])
+			packType = LOCAL_PACKAGE
+			
+		} else {
+			packName = string(n.Path.Value[1 : len(n.Path.Value)-1])
+			packType = UNKNOWN_PACKAGE
 		}
+		
+		dep, exists := v.packs.Get(packName)
+		if !exists {
+			dep = v.packs.AddNewPackage(packName)
+		} else if dep.Type == LOCAL_PACKAGE {
+			packType = LOCAL_PACKAGE
+		}
+		
+		dep.Type = packType
+		v.file.Pack.Depends.Push(dep)
+
+		if string(n.Path.Value) == "\"C\"" {
+			v.file.IsCGOFile = true // not used yet
+		}
+
 		return nil
 	case *ast.FuncDecl:
 		if n.Recv == nil && n.Name.String() == "main" && v.file.Pack.Name == "main" {
