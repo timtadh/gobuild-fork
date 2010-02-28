@@ -7,6 +7,8 @@
 */
 package main
 
+// import "fmt"
+
 import (
 	os "os"
 	"exec"
@@ -34,6 +36,7 @@ var flagClean *bool = flag.Bool("clean", false, "delete all temporary files")
 var flagRunExec *bool = flag.Bool("run", false, "run the created executable(s)")
 var flagMatch *string = flag.String("match", "", "regular expression to select tests to run")
 var flagBenchmarks *string = flag.String("benchmarks", "", "regular expression to select benchmarks to run")
+var flagIgnore *string = flag.String("ignore", "", "ignore these files")
 
 // ========== global (package) variables ==========
 
@@ -88,6 +91,11 @@ func (v *goFileVisitor) VisitFile(filepath string, d *os.Dir) {
 		// include *_test.go files?
 		if strings.HasSuffix(filepath, "_test.go") && (!*flagTesting) {
 			return
+		}
+		cwd, _ := os.Getwd()
+// 		fmt.Println(path.Join(cwd, *flagIgnore), filepath)
+		if filepath == path.Join(cwd, *flagIgnore) {
+		    return
 		}
 
 		var gf godata.GoFile
