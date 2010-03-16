@@ -1,9 +1,9 @@
-// Copyright 2009 by Maurice Gilden. All rights reserved.
+// Copyright 2009-2010 by Maurice Gilden. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 /*
- gobuild - build tool to automate building go programs
+ gobuild - build tool to automate building go programs/libraries
 */
 package main
 
@@ -360,6 +360,19 @@ func compile(pack *godata.GoPackage) bool {
 		}
 	}
 
+	// cgo files (the ones which import "C") can't be compiled
+	// at the moment. They need to be compiled by hand into .a files.
+	if pack.HasCGOFiles() {
+		if pack.HasExistingAFile() {
+			pack.Compiled = true
+			pack.InProgress = false
+			return true
+		} else {
+			logger.Error("Can't compile cgo files. Please manually compile them.\n")
+			os.Exit(1)
+		}
+	}
+
 	// check if this package has any files (if not -> error)
 	if pack.Files.Len() == 0 && pack.Type == godata.LOCAL_PACKAGE {
 		logger.Error("No files found for package %s.\n", pack.Name)
@@ -562,6 +575,13 @@ func runExec(argv []string) {
 */
 func packLib(pack *godata.GoPackage) {
 	var objDir string = "" //outputDirPrefix + getObjDir();
+
+	// ignore packages that need to be build manually (like cgo packages)
+	if pack.HasCGOFiles() {
+		logger.Debug("Skipped %s.a because it can't be build with gobuild.\n", pack.Name)
+		return
+	}
+
 	logger.Info("Creating %s.a...\n", pack.Name)
 
 	argv := []string{
@@ -683,6 +703,23 @@ func buildLibrary() {
 
 	if goPackages.GetPackageCount() == 0 {
 		logger.Warn("No packages found to build.\n")
+		return
+	}
+
+	// check for the first package that could be build with gobuild
+	var hasNoCompilablePacks bool = true
+	for _, packName := range goPackages.GetPackageNames() {
+		pack, _ := goPackages.Get(packName)
+		if pack.Name == "main" {
+			continue
+		}
+		if pack.Files.Len() > 0 && !pack.HasCGOFiles() {
+			hasNoCompilablePacks = false
+			break
+		}
+	}
+	if hasNoCompilablePacks {
+		logger.Warn("No packages found that could be compiled by gobuild.\n")
 		return
 	}
 
@@ -828,6 +865,18 @@ func clean() {
 	}
 }
 
+/*
+ Allows *.a files to be OK'd by Gobuild, so they can be used as local packages
+ without requiring the source code to be compiled.
+*/
+func markCompiledPackages() {
+	for _, packName := range goPackages.GetPackageNames() {
+		pack, _ := goPackages.Get(packName)
+		if pack.HasExistingAFile() {
+			pack.Compiled = true
+		}
+	}
+}
 
 // Returns the bigger number.
 func max(a, b int) int {
