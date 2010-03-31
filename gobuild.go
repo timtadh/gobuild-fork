@@ -323,7 +323,6 @@ func createTestPackage() *godata.GoPackage {
 	testFile.WriteString(testFileSource)
 
 	testFile.Close()
-
 	return testPack
 }
 
@@ -413,6 +412,9 @@ func compile(pack *godata.GoPackage) bool {
 	if pack.NeedsLocalSearchPath() || objDir != "" {
 		argc += 2
 	}
+    if pack.Name == "main" {
+        argc += 2
+    }
 	argv = make([]string, argc)
 
 	argv[argvFilled] = compilerBin
@@ -439,6 +441,12 @@ func compile(pack *godata.GoPackage) bool {
 		}
 		argvFilled++
 	}
+    if pack.Name == "main" {
+        argv[argvFilled] = "-I"
+        argvFilled++
+        argv[argvFilled] = "."
+        argvFilled++
+    }
 
 	for i := 0; i < pack.Files.Len(); i++ {
 		gf := pack.Files.At(i).(*godata.GoFile)
@@ -490,6 +498,9 @@ func link(pack *godata.GoPackage) bool {
 	if pack.NeedsLocalSearchPath() {
 		argc += 2
 	}
+    if pack.Name == "main" {
+        argc += 2
+    }
 
 	argv = make([]string, argc)
 
@@ -515,6 +526,12 @@ func link(pack *godata.GoPackage) bool {
 		}
 		argvFilled++
 	}
+    if pack.Name == "main" {
+        argv[argvFilled] = "-L"
+        argvFilled++
+        argv[argvFilled] = "."
+        argvFilled++
+    }
 	argv[argvFilled] = objDir + pack.OutputFile + objExt
 	argvFilled++
 
@@ -756,7 +773,7 @@ func buildTestExecutable() {
 	}
 
 	// delete temporary _testmain.go file
-	os.Remove("_testmain.go")
+//	os.Remove("_testmain.go")
 
 	if compileErrors || linkErrors {
 		return
