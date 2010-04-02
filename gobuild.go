@@ -773,7 +773,7 @@ func buildTestExecutable() {
 	}
 
 	// delete temporary _testmain.go file
-//	os.Remove("_testmain.go")
+	os.Remove("_testmain.go")
 
 	if compileErrors || linkErrors {
 		return
