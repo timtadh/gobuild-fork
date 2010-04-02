@@ -234,7 +234,7 @@ func createTestPackage() *godata.GoPackage {
 		var tmpStr string
 		var fnCount int = 0
 		pack := (ipack.(*godata.GoPackage))
-		
+
 		// localPackVarName: contains the test functions, package name
 		// with '/' replaced by '_'
 		var localPackVarName string = strings.Map(func(rune int) int {
@@ -273,7 +273,7 @@ func createTestPackage() *godata.GoPackage {
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
 					"\ttesting.Main(test_" + localPackVarName + ");\n"
 			testArrays += tmpStr
-			
+
 			if !flagsDeleted {
 				// this is needed because testing.Main calls flags.Parse
 				// which collides with previous calls to that function
@@ -373,7 +373,7 @@ func compile(pack *godata.GoPackage) bool {
 		os.Exit(1)
 	}
 
-	// if the outputDirPrefix points to something, subdirectories 
+	// if the outputDirPrefix points to something, subdirectories
 	// need to be created if they don't already exist
 	outputFile := objDir + pack.OutputFile
 	if strings.Index(outputFile, "/") != -1 {
@@ -613,6 +613,7 @@ func packLib(pack *godata.GoPackage) {
 		logger.Error("gopack returned with errors, aborting.\n")
 		os.Exit(waitmsg.ExitStatus())
 	}
+	os.Remove(objDir + pack.Name + objExt)
 }
 
 
