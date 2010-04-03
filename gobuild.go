@@ -504,7 +504,7 @@ func link(pack *godata.GoPackage) bool {
         argc += 2
     }
 
-	argv = make([]string, argc)
+	argv = make([]string, argc*3)
 
 	argv[argvFilled] = linkerBin
 	argvFilled++
@@ -513,34 +513,36 @@ func link(pack *godata.GoPackage) bool {
 	argv[argvFilled] = outputDirPrefix + pack.OutputFile
 	argvFilled++
 	if *flagIncludePaths != "" {
-		argv[argvFilled] = "-L"
-		argvFilled++
-		argv[argvFilled] = *flagIncludePaths
-		argvFilled++
+        for _, v := range strings.Split(*flagIncludePaths, ",", 0) {
+            argv[argvFilled] = "-L"
+            argvFilled++
+            argv[argvFilled] = v
+            argvFilled++
+        }
 	}
-	if pack.NeedsLocalSearchPath() {
-		argv[argvFilled] = "-L"
-		argvFilled++
-		if objDir != "" {
-			argv[argvFilled] = objDir
-		} else {
-			argv[argvFilled] = "."
-		}
-		argvFilled++
-	}
-    if pack.Name == "main" {
-        argv[argvFilled] = "-L"
-        argvFilled++
-        argv[argvFilled] = "."
-        argvFilled++
-    }
+// 	if pack.NeedsLocalSearchPath() {
+// 		argv[argvFilled] = "-L"
+// 		argvFilled++
+// 		if objDir != "" {
+// 			argv[argvFilled] = objDir
+// 		} else {
+// 			argv[argvFilled] = "."
+// 		}
+// 		argvFilled++
+// 	}
+//     if pack.Name == "main" {
+//         argv[argvFilled] = "-L"
+//         argvFilled++
+//         argv[argvFilled] = "."
+//         argvFilled++
+//     }
 	argv[argvFilled] = objDir + pack.OutputFile + objExt
 	argvFilled++
 
 	logger.Info("Linking %s...\n", argv[2])
 	logger.Debug("%s\n", getCommandline(argv))
 
-	cmd, err := exec.Run(linkerBin, argv, os.Environ(), rootPath,
+	cmd, err := exec.Run(linkerBin, argv[0:argvFilled], os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
 		logger.Error("%s\n", err)
