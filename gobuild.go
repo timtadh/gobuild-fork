@@ -415,7 +415,7 @@ func compile(pack *godata.GoPackage) bool {
     if pack.Name == "main" {
         argc += 2
     }
-	argv = make([]string, argc)
+	argv = make([]string, argc*2)
 
 	argv[argvFilled] = compilerBin
 	argvFilled++
@@ -425,10 +425,12 @@ func compile(pack *godata.GoPackage) bool {
 	argvFilled++
 
 	if *flagIncludePaths != "" {
-		argv[argvFilled] = "-I"
-		argvFilled++
-		argv[argvFilled] = *flagIncludePaths
-		argvFilled++
+        for _, v := range strings.Split(*flagIncludePaths, ",", 0) {
+            argv[argvFilled] = "-I"
+            argvFilled++
+            argv[argvFilled] = v
+            argvFilled++
+        }
 	}
 
 	if pack.NeedsLocalSearchPath() || objDir != "" {
