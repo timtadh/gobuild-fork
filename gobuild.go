@@ -225,7 +225,8 @@ func createTestPackage() *godata.GoPackage {
 		"package main\n" +
 			"\nimport \"testing\"\n" +
 			"import \"fmt\"\n" +
-			"import \"os\"\n"
+			"//import \"os\"\n" +
+            "import \"flag\"\n"
 
 	// will create an array per package with all the Test* and Benchmark* functions
 	// tests/benchmarks will be done for each package seperatly so that running
@@ -311,6 +312,7 @@ func createTestPackage() *godata.GoPackage {
 	// func main()
 	testFileSource +=
 		"\nfunc main() {\n" +
+            "\tflag.Parse()\n" +
 			testCalls +
 			benchCalls +
 			"}\n"
