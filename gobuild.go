@@ -532,12 +532,12 @@ func link(pack *godata.GoPackage) bool {
 // 		}
 // 		argvFilled++
 // 	}
-//     if pack.Name == "main" {
-//         argv[argvFilled] = "-L"
-//         argvFilled++
-//         argv[argvFilled] = "."
-//         argvFilled++
-//     }
+     if pack.Name == "main" {
+         argv[argvFilled] = "-L"
+         argvFilled++
+         argv[argvFilled] = "."
+         argvFilled++
+     }
 	argv[argvFilled] = objDir + pack.OutputFile + objExt
 	argvFilled++
 
