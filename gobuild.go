@@ -59,7 +59,7 @@ type goFileVisitor struct{
 
 
 // implementation of the Visitor interface for the file walker
-func (v *goFileVisitor) VisitDir(dirpath string, d *os.Dir) bool {
+func (v *goFileVisitor) VisitDir(dirpath string, d *os.FileInfo) bool {
 	if strings.LastIndex(dirpath, "/") < len(dirpath)-1 {
 		if dirpath[strings.LastIndex(dirpath, "/")+1] == '.' {
 			return *flagIncludeInvisible
@@ -69,7 +69,7 @@ func (v *goFileVisitor) VisitDir(dirpath string, d *os.Dir) bool {
 }
 
 // implementation of the Visitor interface for the file walker
-func (v *goFileVisitor) VisitFile(filepath string, d *os.Dir) {
+func (v *goFileVisitor) VisitFile(filepath string, d *os.FileInfo) {
 	// parse hidden directories?
 	if (filepath[strings.LastIndex(filepath, "/")+1] == '.') && (!*flagIncludeInvisible) {
 		return
@@ -891,7 +891,7 @@ func max(a, b int) int {
 */
 func main() {
 	var err os.Error
-	var rootPathDir *os.Dir
+	var rootPathDir *os.FileInfo
 
 	// parse command line arguments
 	flag.Parse()
