@@ -413,7 +413,7 @@ func compile(pack *godata.GoPackage) bool {
 
 	argc = pack.Files.Len() + 3
 	if *flagIncludePaths != "" {
-		argc += 2
+		argc += 2 * (strings.Count(*flagIncludePaths, ",") + 1)
 	}
 	if pack.NeedsLocalSearchPath() || objDir != "" {
 		argc += 2
@@ -428,10 +428,12 @@ func compile(pack *godata.GoPackage) bool {
 	argvFilled++
 
 	if *flagIncludePaths != "" {
-		argv[argvFilled] = "-I"
-		argvFilled++
-		argv[argvFilled] = *flagIncludePaths
-		argvFilled++
+		for _, includePath := range strings.Split(*flagIncludePaths, ",", 0) {
+			argv[argvFilled] = "-I"
+			argvFilled++
+			argv[argvFilled] = includePath
+			argvFilled++
+		}
 	}
 
 	if pack.NeedsLocalSearchPath() || objDir != "" {
