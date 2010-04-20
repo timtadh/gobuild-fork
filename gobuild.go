@@ -708,7 +708,7 @@ func buildLibrary() {
 		return
 	}
 
-	// check for the first package that could be build with gobuild
+	// check for there is at least one package that can be compiled
 	var hasNoCompilablePacks bool = true
 	for _, packName := range goPackages.GetPackageNames() {
 		pack, _ := goPackages.Get(packName)
@@ -722,6 +722,7 @@ func buildLibrary() {
 	}
 	if hasNoCompilablePacks {
 		logger.Warn("No packages found that could be compiled by gobuild.\n")
+		compileErrors = true
 		return
 	}
 
