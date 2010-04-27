@@ -34,7 +34,7 @@ var flagClean *bool = flag.Bool("clean", false, "delete all temporary files")
 var flagRunExec *bool = flag.Bool("run", false, "run the created executable(s)")
 var flagMatch *string = flag.String("match", "", "regular expression to select tests to run")
 var flagBenchmarks *string = flag.String("benchmarks", "", "regular expression to select benchmarks to run")
-
+var flagKeepAFiles *bool = flag.Bool("keep-a-files", false, "don't automatically delete .a archive files")
 // ========== global (package) variables ==========
 
 var compilerBin string
@@ -400,8 +400,10 @@ func compile(pack *godata.GoPackage) bool {
 	// before compiling, remove any .a file
 	// this is done because the compiler/linker looks for .a files
 	// before it looks for .[568] files
-	if err := os.Remove(outputFile + ".a"); err == nil {
-		logger.Debug("Removed file %s.a.\n", outputFile)
+	if !*flagKeepAFiles {
+		if err := os.Remove(outputFile + ".a"); err == nil {
+			logger.Debug("Removed file %s.a.\n", outputFile)
+		}
 	}
 
 	// construct compiler command line arguments
@@ -865,19 +867,6 @@ func clean() {
 	if waitmsg.ExitStatus() != 0 {
 		logger.Error("rm returned with errors.\n")
 		os.Exit(waitmsg.ExitStatus())
-	}
-}
-
-/*
- Allows *.a files to be OK'd by Gobuild, so they can be used as local packages
- without requiring the source code to be compiled.
-*/
-func markCompiledPackages() {
-	for _, packName := range goPackages.GetPackageNames() {
-		pack, _ := goPackages.Get(packName)
-		if pack.HasExistingAFile() {
-			pack.Compiled = true
-		}
 	}
 }
 
