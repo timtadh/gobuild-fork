@@ -84,6 +84,11 @@ func (v *goFileVisitor) VisitFile(filepath string, d *os.FileInfo) {
 		logger.Warn("%s\n", err);
 	}
 
+	// run .y files through goyacc first to create .go files
+	if strings.HasSuffix(filepath, ".y") {
+		filepath = goyacc(filepath)
+	}
+
 	if strings.HasSuffix(filepath, ".go") {
 		// include *_test.go files?
 		if strings.HasSuffix(filepath, "_test.go") && (!*flagTesting) {
@@ -549,6 +554,49 @@ func link(pack *godata.GoPackage) bool {
 	return true
 }
 
+/*
+ Executes goyacc for a single .y file. The new .go files is prefixed with
+ an underscore and returned as a string for further use.
+*/
+func goyacc(filepath string) string {
+	// construct output file path
+	var outFilepath string
+	l_idx := strings.LastIndex(filepath, "/")
+	if l_idx >= 0 {
+		outFilepath = filepath[0:l_idx + 1] + 
+			"_" + filepath[l_idx+1:len(filepath)-1] + "go"
+	} else {
+		outFilepath = "_" + filepath[0:len(filepath)-1] + "go"
+	}
+
+	goyaccPath, err := exec.LookPath("goyacc")
+	if err != nil {
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}
+
+	logger.Info("Parsing goyacc file %s.\n", filepath)
+
+	argv := []string{goyaccPath, "-o", outFilepath, filepath}
+	logger.Debug("%s\n", argv)
+	cmd, err := exec.Run(argv[0], argv, os.Environ(), rootPath,
+		exec.PassThrough, exec.PassThrough, exec.PassThrough)
+	if err != nil {
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}
+	waitmsg, err := cmd.Wait(0)
+	if err != nil {
+		logger.Error("Executing goyacc failed: %s.\n", err)
+		os.Exit(1)
+	}
+
+	if waitmsg.ExitStatus() != 0 {
+		os.Exit(waitmsg.ExitStatus());
+	}
+	
+	return outFilepath
+}
 
 /*
  Executes something. Used for the -run command line option.
