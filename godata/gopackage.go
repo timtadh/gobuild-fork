@@ -27,8 +27,8 @@ type GoPackage struct {
 	Name       string         // name of the package
 	Path       string         // possible relative path to the package
 	Type       int            // local, remote or unknown (default)
-	Files      *vector.Vector // a list of files for this package
-	Depends    *vector.Vector // a list of other local packages this one depends on
+	Files      *vector.Vector  // a list of files for this package
+	Depends    *vector.Vector  // a list of other local packages this one depends on
 	Compiled   bool           // true = finished compiling
 	InProgress bool           // true = currently trying to compile dependencies (needed to find recursive dependencies)
 	HasErrors  bool           // true = compiler returned an error
@@ -106,7 +106,7 @@ func (this *GoPackage) NeedsLocalSearchPath() bool {
  Returns true if one of the files for this package contains some test functions.
 */
 func (this *GoPackage) HasTestFiles() bool {
-	for e := range this.Files.Iter() {
+	for _, e := range *this.Files {
 		if e.(*GoFile).IsTestFile {
 			return true
 		}
@@ -119,7 +119,7 @@ func (this *GoPackage) HasTestFiles() bool {
  can't be compiled by gobuild right now.
 */
 func (this *GoPackage) HasCGOFiles() bool {
-	for e := range this.Files.Iter() {
+	for _, e := range *this.Files {
 		if e.(*GoFile).IsCGOFile {
 			return true
 		}

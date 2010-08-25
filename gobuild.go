@@ -43,7 +43,7 @@ var gopackBin string = "gopack"
 var compileErrors bool = false
 var linkErrors bool = false
 var rootPath string
-var rootPathPerm int
+var rootPathPerm uint32
 var objExt string
 var outputDirPrefix string
 var goPackages *godata.GoPackageContainer
@@ -227,7 +227,7 @@ func createTestPackage() *godata.GoPackage {
 	// will create an array per package with all the Test* and Benchmark* functions
 	// tests/benchmarks will be done for each package seperatly so that running
 	// the _testmain program will result in multiple PASS (or fail) outputs.
-	for ipack := range testPack.Depends.Iter() {
+	for _, ipack := range *testPack.Depends {
 		var tmpStr string
 		var fnCount int = 0
 		pack := (ipack.(*godata.GoPackage))
@@ -250,10 +250,10 @@ func createTestPackage() *godata.GoPackage {
 		testFileSource += "import \"" + pack.Name + "\"\n"
 
 		tmpStr = "var test_" + localPackVarName + " = []testing.Test {\n"
-		for igf := range pack.Files.Iter() {
+		for _, igf := range *pack.Files {
 			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename)
 			if (igf.(*godata.GoFile)).IsTestFile {
-				for istr := range (igf.(*godata.GoFile)).TestFunctions.Iter() {
+				for _, istr := range *(igf.(*godata.GoFile)).TestFunctions {
 					tmpStr += "\ttesting.Test{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
@@ -281,9 +281,9 @@ func createTestPackage() *godata.GoPackage {
 
 		fnCount = 0
 		tmpStr = "var bench_" + localPackVarName + " = []testing.Benchmark {\n"
-		for igf := range pack.Files.Iter() {
+		for _, igf := range *pack.Files {
 			if (igf.(*godata.GoFile)).IsTestFile {
-				for istr := range (igf.(*godata.GoFile)).BenchmarkFunctions.Iter() {
+				for _, istr := range *(igf.(*godata.GoFile)).BenchmarkFunctions {
 					tmpStr += "\ttesting.Benchmark{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
@@ -346,7 +346,7 @@ func compile(pack *godata.GoPackage) bool {
 	pack.InProgress = true
 
 	// first compile all dependencies
-	for idep := range pack.Depends.Iter() {
+	for _, idep := range *pack.Depends {
 		dep := idep.(*godata.GoPackage)
 		if dep.HasErrors {
 			pack.HasErrors = true
