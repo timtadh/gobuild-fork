@@ -8,7 +8,8 @@
 package main
 
 import (
-	os "os"
+	"os"
+	"runtime"
 	"exec"
 	"flag"
 	"path"
@@ -950,7 +951,12 @@ func main() {
 	}
 
 	// get the compiler/linker executable
-	switch os.Getenv("GOARCH") {
+	var goarch string;
+	goarch = os.Getenv("GOARCH")
+	if (goarch == "") {
+		goarch = runtime.GOARCH
+	}
+	switch goarch {
 	case "amd64":
 		compilerBin = "6g"
 		linkerBin = "6l"
@@ -964,7 +970,7 @@ func main() {
 		linkerBin = "5l"
 		objExt = ".5"
 	default:
-		logger.Error("Please specify a valid GOARCH (amd64/386/arm).\n")
+		logger.Error("Unsupported architecture: " + goarch + "\n")
 		os.Exit(1)
 	}
 
