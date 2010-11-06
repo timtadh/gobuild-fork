@@ -1,0 +1,142 @@
+Description
+------------
+gobuild is an automatic build tool that aims to replace Makefiles for simple
+projects written in the Go programming language. It creates a dependency graph
+of all local imports and compiles them in the right order using the gc Go
+compiler.
+
+
+Compiling
+----------
+
+gobuild comes with a Makefile, so running 'make' and 'make install' will build
+and install it.
+
+If you have an older version of gobuild, running gobuild without parameters
+inside the source directory should be enough to compile it.
+
+
+Usage
+------
+
+Only pure Go code is supported right now. Building something that needs C code
+won't work.
+
+Building an executable:
+
+For most simple applications it should be enough to run gobuild without any
+parameters. If there are multiple main functions in different files you have to
+give the file name for one or more of these files in the command line. You can
+also build all of them with the -a option.
+
+Files that are inside the main package but don't have a main function will be
+included by default. To prevent this you can use the option -single-main.
+
+Building a library:
+
+Library files (.a) can be build by running 'gobuild -lib' inside the source
+directory of your files. Each package will result in its own library file.
+If you want to build only certain packages you can give their names as
+parameters to gobuild.
+
+Testing/Benchmarks:
+
+If there are any files ending in _test.go you can build a test-executable
+with 'gobuild -t'. This will create a new executable called '_testmain'.
+Test/Benchmark functions must match the official naming convention, see
+http://golang.org/doc/code.html#Testing for more details.
+To run the test you can either run 'gobuild -t -run' or run the _testmain
+executable after gobuild. Both methods can have any of the these additional
+command line options: -match/-benchmarks/-v.
+Without any options, all tests will be run but none of the benchmarks. To
+run the benchmarks, use '-benchmarks="."'.
+
+The output of a gobuild test-executable is a bit different from what gotest
+does. In addition to "PASS"/"FAIL" or timing values it will also print out the
+package name that is being tested/benchmarked. The exit code will still be 1 if
+any test failed.
+
+
+Parameters
+-----------
+
+> gobuild [options] [gofile(s)]
+> gobuild -lib [options] [gopackage(s)]
+> gobuild -t [options]
+
+ gofile(s)
+        For building an executable you can give one or more go-file names
+        that must have a main function inside. The resulting executable will
+        be called after the filename, but without extension.
+        This parameter is optional if there's only one main file or the
+        parameter -a is given.
+        
+ gopackage(s)
+        If building a library you can give a list of packages that should
+        be build. Only those packages will be build into libraries.
+
+ -a
+        Build all executables.
+
+ -benchmarks <regular expression>
+        Same syntax as in gotest. This will only be used together with -t -run.
+        Any Bench* function that matches the regular expression will be run
+        during the benchmarks. If this is empty no benchmarks will be run.
+ 
+ -clean
+        Deletes all temporary files. Files are the same as 'make clean' and
+        it is possible that this will delete important files if called inside
+        the wrong directory.
+
+ -include-hidden
+        Include files in hidden directories and hidden files.
+
+ -keep-a-files
+	Prevents the automatic deletion of .a files for packages that are inside
+	the current src directory. Not deleting .a files can lead to errors so only
+	use this option if you know what you are doing.
+
+ -lib
+        Build all packages, excluding the main package, into library files (.a).
+
+ -match <regular expression>
+        Same syntax as in gotest. This will only be used together with -t -run.
+        Any Test* function that matches the regular expression will be run
+        during testing. If this is empty all tests will be run.
+       
+ -o <filename/dir>
+        This parameter can either have a filename or a directory as parameter.
+        File names only work for executables while directories will also work
+        when building librarys.
+        If building an executable without giving an output file name the default
+        name will be the same as the .go file name without extension.
+ 
+ -q
+        Quiet mode, only print warnings and errors (overwrites -v).
+
+ -qq
+        Quieter mode, only print errors (overwrites -v and -q).
+
+ -run
+        Runs all executables after building them. If used together with -t it
+        will run the _testmain executable and pass over any of these options:
+        -benchmarks/-match/-v.
+        To quiet the build process, use either -q or -qq.
+
+ -single-main
+        Don't include files from the main package without main function to
+        the one with main function when compiling.
+
+ -t
+        Build all _test.go files into a single _testmain application. This
+        option will create a temporary file called _testmain.go (and overwrite
+        any existing file with that name).
+        Tests are run for each package seperately so the test output is a bit
+        different from what gotest produces.
+        To run the tests either run _testmain after building it, or use the
+        additional command line option -run. With -run -benchmarks/-match/-v
+        will also be passed on to _testmain.
+
+ -v
+        Verbose mode, print debug messages.
+

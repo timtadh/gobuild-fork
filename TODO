@@ -1,0 +1,16 @@
+ - -t with package-name/file-name (build tests for this package/files only)
+ - -o with -t should also be useful for filenames
+ - change root path if command line to main file is in a different (non-sub) directory
+ - goyacc support for .y files
+ - create (HTML) docs (without HTTP-server)
+ - support for external librarys (run cgo and figure out include paths? might need gobuild.hint first)
+ - differ between packages with same name but different paths (error?)
+ - BUG: if package file is in depth-2 sub-dir with wrong names, compilation fails
+ - (optional) colorize errors/warnings
+ - exclude command line parameter -X (for files/filemasks/directories)
+ - automatic build repair (react on some compile/link errors)
+ - gobuild.hint file
+ - (optional) Makefile creator
+ - make the -clean option safer/better (error if wrong permissions, no .go files, etc.)
+ - support gccgo
+ - Windows support (might just work...?)
