@@ -230,6 +230,7 @@ func createTestPackage() *godata.GoPackage {
 	testFileSource =
 		"package main\n" +
 			"\nimport \"testing\"\n" +
+			"import __regexp__ \"regexp\"\n" + 
 			"import \"fmt\"\n" +
 			"import \"os\"\n"
 
@@ -278,7 +279,7 @@ func createTestPackage() *godata.GoPackage {
 		if fnCount > 0 {
 			testCalls +=
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
-					"\ttesting.Main(test_" + localPackVarName + ");\n"
+					"\ttesting.Main(__regexp__.MatchString, test_" + localPackVarName + ");\n"
 			testArrays += tmpStr
 			
 			if !flagsDeleted {
@@ -868,7 +869,7 @@ func buildTestExecutable() {
 	}
 
 	// delete temporary _testmain.go file
-	os.Remove("_testmain.go")
+// 	os.Remove("_testmain.go")
 
 	if compileErrors || linkErrors {
 		return
