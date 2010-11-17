@@ -1,16 +1,17 @@
-// Copyright 2009 by Maurice Gilden. All rights reserved.
+// Copyright 2009-2010 by Maurice Gilden. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 /*
- gobuild - build tool to automate building go programs
+ gobuild - build tool to automate building go programs/libraries
 */
 package main
 
 // import "fmt"
 
 import (
-	os "os"
+	"os"
+	"runtime"
 	"exec"
 	"flag"
 	"path"
@@ -37,7 +38,7 @@ var flagRunExec *bool = flag.Bool("run", false, "run the created executable(s)")
 var flagMatch *string = flag.String("match", "", "regular expression to select tests to run")
 var flagBenchmarks *string = flag.String("benchmarks", "", "regular expression to select benchmarks to run")
 var flagIgnore *string = flag.String("ignore", "", "ignore these files")
-
+var flagKeepAFiles *bool = flag.Bool("keep-a-files", false, "don't automatically delete .a archive files")
 // ========== global (package) variables ==========
 
 var compilerBin string
@@ -46,7 +47,7 @@ var gopackBin string = "gopack"
 var compileErrors bool = false
 var linkErrors bool = false
 var rootPath string
-var rootPathPerm int
+var rootPathPerm uint32
 var objExt string
 var outputDirPrefix string
 var goPackages *godata.GoPackageContainer
@@ -62,7 +63,7 @@ type goFileVisitor struct{
 
 
 // implementation of the Visitor interface for the file walker
-func (v *goFileVisitor) VisitDir(dirpath string, d *os.Dir) bool {
+func (v *goFileVisitor) VisitDir(dirpath string, d *os.FileInfo) bool {
 	if strings.LastIndex(dirpath, "/") < len(dirpath)-1 {
 		if dirpath[strings.LastIndex(dirpath, "/")+1] == '.' {
 			return *flagIncludeInvisible
@@ -72,7 +73,7 @@ func (v *goFileVisitor) VisitDir(dirpath string, d *os.Dir) bool {
 }
 
 // implementation of the Visitor interface for the file walker
-func (v *goFileVisitor) VisitFile(filepath string, d *os.Dir) {
+func (v *goFileVisitor) VisitFile(filepath string, d *os.FileInfo) {
 	// parse hidden directories?
 	if (filepath[strings.LastIndex(filepath, "/")+1] == '.') && (!*flagIncludeInvisible) {
 		return
@@ -85,6 +86,11 @@ func (v *goFileVisitor) VisitFile(filepath string, d *os.Dir) {
 		}
 	} else {
 		logger.Warn("%s\n", err);
+	}
+
+	// run .y files through goyacc first to create .go files
+	if strings.HasSuffix(filepath, ".y") {
+		filepath = goyacc(filepath)
 	}
 
 	if strings.HasSuffix(filepath, ".go") {
@@ -225,17 +231,16 @@ func createTestPackage() *godata.GoPackage {
 		"package main\n" +
 			"\nimport \"testing\"\n" +
 			"import \"fmt\"\n" +
-			"import \"os\"\n" +
-            "import \"flag\"\n"
+			"import \"os\"\n"
 
 	// will create an array per package with all the Test* and Benchmark* functions
 	// tests/benchmarks will be done for each package seperatly so that running
 	// the _testmain program will result in multiple PASS (or fail) outputs.
-	for ipack := range testPack.Depends.Iter() {
+	for _, ipack := range *testPack.Depends {
 		var tmpStr string
 		var fnCount int = 0
 		pack := (ipack.(*godata.GoPackage))
-
+		
 		// localPackVarName: contains the test functions, package name
 		// with '/' replaced by '_'
 		var localPackVarName string = strings.Map(func(rune int) int {
@@ -254,10 +259,11 @@ func createTestPackage() *godata.GoPackage {
 		testFileSource += "import \"" + pack.Name + "\"\n"
 
 		tmpStr = "var test_" + localPackVarName + " = []testing.Test {\n"
-		for igf := range pack.Files.Iter() {
+		
+		for _, igf := range *pack.Files {
 			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename)
 			if (igf.(*godata.GoFile)).IsTestFile {
-				for istr := range (igf.(*godata.GoFile)).TestFunctions.Iter() {
+				for _, istr := range *(igf.(*godata.GoFile)).TestFunctions {
 					tmpStr += "\ttesting.Test{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
@@ -274,7 +280,7 @@ func createTestPackage() *godata.GoPackage {
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
 					"\ttesting.Main(test_" + localPackVarName + ");\n"
 			testArrays += tmpStr
-
+			
 			if !flagsDeleted {
 				// this is needed because testing.Main calls flags.Parse
 				// which collides with previous calls to that function
@@ -285,9 +291,9 @@ func createTestPackage() *godata.GoPackage {
 
 		fnCount = 0
 		tmpStr = "var bench_" + localPackVarName + " = []testing.Benchmark {\n"
-		for igf := range pack.Files.Iter() {
+		for _, igf := range *pack.Files {
 			if (igf.(*godata.GoFile)).IsTestFile {
-				for istr := range (igf.(*godata.GoFile)).BenchmarkFunctions.Iter() {
+				for _, istr := range *(igf.(*godata.GoFile)).BenchmarkFunctions {
 					tmpStr += "\ttesting.Benchmark{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
@@ -313,7 +319,6 @@ func createTestPackage() *godata.GoPackage {
 	testFileSource +=
 		"\nfunc main() {\n" +
 			testCalls +
-            "\tflag.Parse()\n" +
 			benchCalls +
 			"}\n"
 
@@ -350,7 +355,7 @@ func compile(pack *godata.GoPackage) bool {
 	pack.InProgress = true
 
 	// first compile all dependencies
-	for idep := range pack.Depends.Iter() {
+	for _, idep := range *pack.Depends {
 		dep := idep.(*godata.GoPackage)
 		if dep.HasErrors {
 			pack.HasErrors = true
@@ -366,6 +371,19 @@ func compile(pack *godata.GoPackage) bool {
 				pack.InProgress = false
 				return false
 			}
+		}
+	}
+
+	// cgo files (the ones which import "C") can't be compiled
+	// at the moment. They need to be compiled by hand into .a files.
+	if pack.HasCGOFiles() {
+		if pack.HasExistingAFile() {
+			pack.Compiled = true
+			pack.InProgress = false
+			return true
+		} else {
+			logger.Error("Can't compile cgo files. Please manually compile them.\n")
+			os.Exit(1)
 		}
 	}
 
@@ -396,8 +414,10 @@ func compile(pack *godata.GoPackage) bool {
 	// before compiling, remove any .a file
 	// this is done because the compiler/linker looks for .a files
 	// before it looks for .[568] files
-	if err := os.Remove(outputFile + ".a"); err == nil {
-		logger.Debug("Removed file %s.a.\n", outputFile)
+	if !*flagKeepAFiles {
+		if err := os.Remove(outputFile + ".a"); err == nil {
+			logger.Debug("Removed file %s.a.\n", outputFile)
+		}
 	}
 
 	// construct compiler command line arguments
@@ -409,7 +429,7 @@ func compile(pack *godata.GoPackage) bool {
 
 	argc = pack.Files.Len() + 3
 	if *flagIncludePaths != "" {
-		argc += 2
+		argc += 2 * (strings.Count(*flagIncludePaths, ",") + 1)
 	}
 	if pack.NeedsLocalSearchPath() || objDir != "" {
 		argc += 2
@@ -427,12 +447,12 @@ func compile(pack *godata.GoPackage) bool {
 	argvFilled++
 
 	if *flagIncludePaths != "" {
-        for _, v := range strings.Split(*flagIncludePaths, ",", 0) {
-            argv[argvFilled] = "-I"
-            argvFilled++
-            argv[argvFilled] = v
-            argvFilled++
-        }
+		for _, includePath := range strings.Split(*flagIncludePaths, ",", 0) {
+			argv[argvFilled] = "-I"
+			argvFilled++
+			argv[argvFilled] = includePath
+			argvFilled++
+		}
 	}
 
 	if pack.NeedsLocalSearchPath() || objDir != "" {
@@ -563,6 +583,49 @@ func link(pack *godata.GoPackage) bool {
 	return true
 }
 
+/*
+ Executes goyacc for a single .y file. The new .go files is prefixed with
+ an underscore and returned as a string for further use.
+*/
+func goyacc(filepath string) string {
+	// construct output file path
+	var outFilepath string
+	l_idx := strings.LastIndex(filepath, "/")
+	if l_idx >= 0 {
+		outFilepath = filepath[0:l_idx + 1] + 
+			"_" + filepath[l_idx+1:len(filepath)-1] + "go"
+	} else {
+		outFilepath = "_" + filepath[0:len(filepath)-1] + "go"
+	}
+
+	goyaccPath, err := exec.LookPath("goyacc")
+	if err != nil {
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}
+
+	logger.Info("Parsing goyacc file %s.\n", filepath)
+
+	argv := []string{goyaccPath, "-o", outFilepath, filepath}
+	logger.Debug("%s\n", argv)
+	cmd, err := exec.Run(argv[0], argv, os.Environ(), rootPath,
+		exec.PassThrough, exec.PassThrough, exec.PassThrough)
+	if err != nil {
+		logger.Error("%s\n", err)
+		os.Exit(1)
+	}
+	waitmsg, err := cmd.Wait(0)
+	if err != nil {
+		logger.Error("Executing goyacc failed: %s.\n", err)
+		os.Exit(1)
+	}
+
+	if waitmsg.ExitStatus() != 0 {
+		os.Exit(waitmsg.ExitStatus());
+	}
+	
+	return outFilepath
+}
 
 /*
  Executes something. Used for the -run command line option.
@@ -593,6 +656,13 @@ func runExec(argv []string) {
 */
 func packLib(pack *godata.GoPackage) {
 	var objDir string = "" //outputDirPrefix + getObjDir();
+
+	// ignore packages that need to be build manually (like cgo packages)
+	if pack.HasCGOFiles() {
+		logger.Debug("Skipped %s.a because it can't be build with gobuild.\n", pack.Name)
+		return
+	}
+
 	logger.Info("Creating %s.a...\n", pack.Name)
 
 	argv := []string{
@@ -715,6 +785,24 @@ func buildLibrary() {
 
 	if goPackages.GetPackageCount() == 0 {
 		logger.Warn("No packages found to build.\n")
+		return
+	}
+
+	// check for there is at least one package that can be compiled
+	var hasNoCompilablePacks bool = true
+	for _, packName := range goPackages.GetPackageNames() {
+		pack, _ := goPackages.Get(packName)
+		if pack.Name == "main" {
+			continue
+		}
+		if pack.Files.Len() > 0 && !pack.HasCGOFiles() {
+			hasNoCompilablePacks = false
+			break
+		}
+	}
+	if hasNoCompilablePacks {
+		logger.Warn("No packages found that could be compiled by gobuild.\n")
+		compileErrors = true
 		return
 	}
 
@@ -860,7 +948,6 @@ func clean() {
 	}
 }
 
-
 // Returns the bigger number.
 func max(a, b int) int {
 	if a > b {
@@ -874,7 +961,7 @@ func max(a, b int) int {
 */
 func main() {
 	var err os.Error
-	var rootPathDir *os.Dir
+	var rootPathDir *os.FileInfo
 
 	// parse command line arguments
 	flag.Parse()
@@ -893,7 +980,12 @@ func main() {
 	}
 
 	// get the compiler/linker executable
-	switch os.Getenv("GOARCH") {
+	var goarch string;
+	goarch = os.Getenv("GOARCH")
+	if (goarch == "") {
+		goarch = runtime.GOARCH
+	}
+	switch goarch {
 	case "amd64":
 		compilerBin = "6g"
 		linkerBin = "6l"
@@ -907,7 +999,7 @@ func main() {
 		linkerBin = "5l"
 		objExt = ".5"
 	default:
-		logger.Error("Please specify a valid GOARCH (amd64/386/arm).\n")
+		logger.Error("Unsupported architecture: " + goarch + "\n")
 		os.Exit(1)
 	}
 

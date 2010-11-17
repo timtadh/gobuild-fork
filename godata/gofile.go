@@ -1,7 +1,10 @@
-// Copyright 2009 by Maurice Gilden. All rights reserved.
+// Copyright 2009-2010 by Maurice Gilden. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+/*
+ Code for handling .go files.
+*/
 package godata
 
 import (
@@ -46,10 +49,10 @@ func (this *GoFile) ParseFile(packs *GoPackageContainer) (err os.Error) {
 	var packName string
 	var fileast *ast.File
 
-	if fileast, err = parser.ParseFile(this.Filename, nil, nil, 0); err != nil {
+	if fileast, err = parser.ParseFile(this.Filename, nil, 0); err != nil {
 		logger.Error("%s\n", err)
 		os.Exit(1)
-	}	
+	}
 
 	packName = fileast.Name.String()
 
@@ -143,7 +146,7 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 		v.file.Pack.Depends.Push(dep)
 
 		if string(n.Path.Value) == "\"C\"" {
-			v.file.IsCGOFile = true // not used yet
+			v.file.IsCGOFile = true
 		}
 
 		return nil

@@ -1,3 +1,10 @@
+// Copyright 2009-2010 by Maurice Gilden. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+/*
+ A collection of helper functions for console output.
+*/
 package logger
 
 import "fmt"
@@ -24,7 +31,7 @@ func SetVerbosityLevel(level int) { verbosity = level }
 func Debug(format string, v ...interface{}) {
 	if verbosity <= DEBUG {
 		fmt.Printf("DEBUG: ")
-		fmt.Printf(format, v)
+		fmt.Printf(format, v...)
 	}
 }
 
@@ -35,7 +42,7 @@ func Debug(format string, v ...interface{}) {
 func DebugContinue(format string, v ...interface{}) {
 	if verbosity <= DEBUG {
 		fmt.Printf("       ")
-		fmt.Printf(format, v)
+		fmt.Printf(format, v...)
 	}
 }
 
@@ -45,7 +52,7 @@ func DebugContinue(format string, v ...interface{}) {
 */
 func Info(format string, v ...interface{}) {
 	if verbosity <= DEFAULT {
-		fmt.Printf(format, v)
+		fmt.Printf(format, v...)
 	}
 }
 
@@ -56,7 +63,7 @@ func Info(format string, v ...interface{}) {
 func Warn(format string, v ...interface{}) {
 	if verbosity <= WARN {
 		fmt.Print("WARNING: ")
-		fmt.Printf(format, v)
+		fmt.Printf(format, v...)
 	}
 }
 
@@ -67,7 +74,7 @@ func Warn(format string, v ...interface{}) {
 func WarnContinue(format string, v ...interface{}) {
 	if verbosity <= WARN {
 		fmt.Print("         ")
-		fmt.Printf(format, v)
+		fmt.Printf(format, v...)
 	}
 }
 
@@ -77,7 +84,7 @@ func WarnContinue(format string, v ...interface{}) {
 func Error(format string, v ...interface{}) {
 	if verbosity <= ERROR {
 		fmt.Fprint(os.Stderr, "ERROR: ")
-		fmt.Fprintf(os.Stderr, format, v)
+		fmt.Fprintf(os.Stderr, format, v...)
 	}
 }
 
@@ -88,6 +95,6 @@ func Error(format string, v ...interface{}) {
 func ErrorContinue(format string, v ...interface{}) {
 	if verbosity <= ERROR {
 		fmt.Fprint(os.Stderr, "       ")
-		fmt.Fprintf(os.Stderr, format, v)
+		fmt.Fprintf(os.Stderr, format, v...)
 	}
 }

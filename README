@@ -91,6 +91,11 @@ Parameters
  -include-hidden
         Include files in hidden directories and hidden files.
 
+ -keep-a-files
+	Prevents the automatic deletion of .a files for packages that are inside
+	the current src directory. Not deleting .a files can lead to errors so only
+	use this option if you know what you are doing.
+
  -lib
         Build all packages, excluding the main package, into library files (.a).
 

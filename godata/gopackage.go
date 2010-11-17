@@ -1,4 +1,4 @@
-// Copyright 2009 by Maurice Gilden. All rights reserved.
+// Copyright 2009-2010 by Maurice Gilden. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -8,11 +8,14 @@
 package godata
 
 import "container/vector"
+import "os"
 import "./logger"
+
 
 const (
 	UNKNOWN_PACKAGE = iota // could be in the local path or somewhere else
-	LOCAL_PACKAGE   // this is imported with "./name"
+	                       // it's local if the package has files
+	LOCAL_PACKAGE   // imported with "./name" (and not "name")
 	REMOTE_PACKAGE  // unused right now
 )
 
@@ -24,8 +27,8 @@ type GoPackage struct {
 	Name       string         // name of the package
 	Path       string         // possible relative path to the package
 	Type       int            // local, remote or unknown (default)
-	Files      *vector.Vector // a list of files for this package
-	Depends    *vector.Vector // a list of other local packages this one depends on
+	Files      *vector.Vector  // a list of files for this package
+	Depends    *vector.Vector  // a list of other local packages this one depends on
 	Compiled   bool           // true = finished compiling
 	InProgress bool           // true = currently trying to compile dependencies (needed to find recursive dependencies)
 	HasErrors  bool           // true = compiler returned an error
@@ -84,6 +87,9 @@ func (this *GoPackage) Merge(pack *GoPackage) {
 	}
 }
 
+/*
+
+*/
 func (this *GoPackage) NeedsLocalSearchPath() bool {
 	var ret bool = false
 	this.Depends.Do(func(dep interface{}) {
@@ -95,6 +101,42 @@ func (this *GoPackage) NeedsLocalSearchPath() bool {
 
 	return ret
 }
+
+/*
+ Returns true if one of the files for this package contains some test functions.
+*/
+func (this *GoPackage) HasTestFiles() bool {
+	for _, e := range *this.Files {
+		if e.(*GoFile).IsTestFile {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+ Check files if one of them needs to be build with cgo. Those
+ can't be compiled by gobuild right now.
+*/
+func (this *GoPackage) HasCGOFiles() bool {
+	for _, e := range *this.Files {
+		if e.(*GoFile).IsCGOFile {
+			return true
+		}
+	}
+
+	return false
+}
+
+/*
+ This looks for an existing .a file for this package
+ and returns true if one was found.
+*/
+func (this *GoPackage) HasExistingAFile() bool {
+	_, err := os.Stat(this.OutputFile + ".a")
+	return err == nil
+}
+
 
 // ================================
 // ====== GoPackageContainer ======
@@ -271,14 +313,3 @@ func (this *GoPackageContainer) GetPackageNames() (packNames []string) {
 	return
 }
 
-func (this *GoPackage) HasTestFiles() bool {
-	var hasTest bool = false
-
-	this.Files.Do(func(e interface{}) {
-		if (e.(*GoFile)).IsTestFile {
-			hasTest = true
-		}
-	})
-
-	return hasTest
-}
