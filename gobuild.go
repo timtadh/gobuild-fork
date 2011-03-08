@@ -450,13 +450,18 @@ func compile(pack *godata.GoPackage) bool {
 	argvFilled++
 
 	if *flagIncludePaths != "" {
-		for _, includePath := range strings.Split(*flagIncludePaths, ",", 0) {
+		for _, includePath := range strings.Split(*flagIncludePaths, ",", -1) {
 			argv[argvFilled] = "-I"
 			argvFilled++
 			argv[argvFilled] = includePath
 			argvFilled++
 		}
 	}
+// 	for _, arg := range argv {
+// 		logger.Info(arg)
+// 		logger.Info(" ")
+// 	}
+// 	logger.Info("\n")
 
 	if pack.NeedsLocalSearchPath() || objDir != "" {
 		argv[argvFilled] = "-I"
@@ -481,7 +486,7 @@ func compile(pack *godata.GoPackage) bool {
 		argvFilled++
 	}
 
-	logger.Debug("%s\n", getCommandline(argv[0:argvFilled]))
+	logger.Info("%s\n", getCommandline(argv[0:argvFilled]))
 	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
@@ -538,7 +543,7 @@ func link(pack *godata.GoPackage) bool {
 	argv[argvFilled] = outputDirPrefix + pack.OutputFile
 	argvFilled++
 	if *flagIncludePaths != "" {
-        for _, v := range strings.Split(*flagIncludePaths, ",", 0) {
+        for _, v := range strings.Split(*flagIncludePaths, ",", -1) {
             argv[argvFilled] = "-L"
             argvFilled++
             argv[argvFilled] = v
@@ -565,7 +570,7 @@ func link(pack *godata.GoPackage) bool {
 	argvFilled++
 
 	logger.Info("Linking %s...\n", argv[2])
-	logger.Debug("%s\n", getCommandline(argv))
+	logger.Info("%s\n", getCommandline(argv))
 
 	cmd, err := exec.Run(linkerBin, argv[0:argvFilled], os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
