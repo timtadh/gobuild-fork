@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"exec"
 	"flag"
-	"path"
+	path "path/filepath"
 	"strings"
 	"container/vector"
 	"./godata"
@@ -181,8 +181,10 @@ func readFiles(rootpath string) {
 
 	path.Walk(visitor.realpath, visitor, errorChannel)
 
-	if err, ok := <-errorChannel; ok {
+	select {
+	case err := <- errorChannel:
 		logger.Error("Error while traversing directories: %s\n", err)
+	default:
 	}
 }
 
@@ -230,7 +232,7 @@ func createTestPackage() *godata.GoPackage {
 	testFileSource =
 		"package main\n" +
 			"\nimport \"testing\"\n" +
-			"import __regexp__ \"regexp\"\n" + 
+			"import __regexp__ \"regexp\"\n" +
 			"import \"fmt\"\n" +
 			"import \"os\"\n"
 
@@ -241,7 +243,7 @@ func createTestPackage() *godata.GoPackage {
 		var tmpStr string
 		var fnCount int = 0
 		pack := (ipack.(*godata.GoPackage))
-		
+
 		// localPackVarName: contains the test functions, package name
 		// with '/' replaced by '_'
 		var localPackVarName string = strings.Map(func(rune int) int {
@@ -260,7 +262,7 @@ func createTestPackage() *godata.GoPackage {
 		testFileSource += "import \"" + pack.Name + "\"\n"
 
 		tmpStr = "var test_" + localPackVarName + " = []testing.Test {\n"
-		
+
 		for _, igf := range *pack.Files {
 			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename)
 			if (igf.(*godata.GoFile)).IsTestFile {
@@ -281,7 +283,7 @@ func createTestPackage() *godata.GoPackage {
 				"\tfmt.Println(\"Testing " + pack.Name + ":\");\n" +
 					"\ttesting.Main(__regexp__.MatchString, test_" + localPackVarName + ");\n"
 			testArrays += tmpStr
-			
+
 			if !flagsDeleted {
 				// this is needed because testing.Main calls flags.Parse
 				// which collides with previous calls to that function
@@ -593,7 +595,7 @@ func goyacc(filepath string) string {
 	var outFilepath string
 	l_idx := strings.LastIndex(filepath, "/")
 	if l_idx >= 0 {
-		outFilepath = filepath[0:l_idx + 1] + 
+		outFilepath = filepath[0:l_idx + 1] +
 			"_" + filepath[l_idx+1:len(filepath)-1] + "go"
 	} else {
 		outFilepath = "_" + filepath[0:len(filepath)-1] + "go"
@@ -624,7 +626,7 @@ func goyacc(filepath string) string {
 	if waitmsg.ExitStatus() != 0 {
 		os.Exit(waitmsg.ExitStatus());
 	}
-	
+
 	return outFilepath
 }
 

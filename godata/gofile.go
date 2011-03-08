@@ -12,6 +12,7 @@ import (
 	"os"
 	"go/ast"
 	"go/parser"
+	"go/token"
 	"./logger"
 	"container/vector"
 )
@@ -49,7 +50,7 @@ func (this *GoFile) ParseFile(packs *GoPackageContainer) (err os.Error) {
 	var packName string
 	var fileast *ast.File
 
-	if fileast, err = parser.ParseFile(this.Filename, nil, 0); err != nil {
+	if fileast, err = parser.ParseFile(token.NewFileSet(), this.Filename, nil, 0); err != nil {
 		logger.Error("%s\n", err)
 		os.Exit(1)
 	}
@@ -117,7 +118,7 @@ type astVisitor struct {
  Implementation of the visitor interface for ast walker.
  Returning nil stops the walker, anything else continues into the subtree
 */
-func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
+func (v astVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	switch n := node.(type) {
 	case *ast.ImportSpec:
 		var packName string
@@ -129,19 +130,19 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 			// local package found
 			packName = string(n.Path.Value[3 : len(n.Path.Value)-1])
 			packType = LOCAL_PACKAGE
-			
+
 		} else {
 			packName = string(n.Path.Value[1 : len(n.Path.Value)-1])
 			packType = UNKNOWN_PACKAGE
 		}
-		
+
 		dep, exists := v.packs.Get(packName)
 		if !exists {
 			dep = v.packs.AddNewPackage(packName)
 		} else if dep.Type == LOCAL_PACKAGE {
 			packType = LOCAL_PACKAGE
 		}
-		
+
 		dep.Type = packType
 		v.file.Pack.Depends.Push(dep)
 
@@ -164,7 +165,7 @@ func (v astVisitor) Visit(node interface{}) (w ast.Visitor) {
 		}
 		return nil
 	case *ast.Package, *ast.File, *ast.BadDecl,
-		*ast.GenDecl, *ast.Ident, []ast.Decl:
+		*ast.GenDecl, *ast.Ident, ast.Decl:
 		return v
 
 
