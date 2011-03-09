@@ -261,13 +261,13 @@ func createTestPackage() *godata.GoPackage {
 
 		testFileSource += "import \"" + pack.Name + "\"\n"
 
-		tmpStr = "var test_" + localPackVarName + " = []testing.Test {\n"
+		tmpStr = "var test_" + localPackVarName + " = []testing.InternalTest {\n"
 
 		for _, igf := range *pack.Files {
 			logger.Debug("Test* from %s: \n", (igf.(*godata.GoFile)).Filename)
 			if (igf.(*godata.GoFile)).IsTestFile {
 				for _, istr := range *(igf.(*godata.GoFile)).TestFunctions {
-					tmpStr += "\ttesting.Test{ \"" +
+					tmpStr += "\ttesting.InternalTest{ \"" +
 						pack.Name + "." + istr.(string) +
 						"\", " +
 						localPackName + "." + istr.(string) +
