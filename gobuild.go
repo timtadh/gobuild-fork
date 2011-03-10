@@ -478,7 +478,7 @@ func compile(pack *godata.GoPackage) bool {
 		argvFilled++
 	}
 
-	logger.Info("%s\n", getCommandline(argv[0:argvFilled]))
+	logger.Info("    %s\n", getCommandline(argv[0:argvFilled]))
 	cmd, err := exec.Run(compilerBin, argv[0:argvFilled], os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
 	if err != nil {
@@ -562,7 +562,7 @@ func link(pack *godata.GoPackage) bool {
 	argvFilled++
 
 	logger.Info("Linking %s...\n", argv[2])
-	logger.Info("%s\n", getCommandline(argv))
+	logger.Info("    %s\n\n", getCommandline(argv))
 
 	cmd, err := exec.Run(linkerBin, argv[0:argvFilled], os.Environ(), rootPath,
 		exec.DevNull, exec.PassThrough, exec.PassThrough)
