@@ -201,7 +201,6 @@ func createTestPackage() *godata.GoPackage {
 	var testFile *os.File
 	var err os.Error
 	var pack *godata.GoPackage
-	var flagsDeleted bool = false
 
 	testGoFile = new(godata.GoFile)
 	testPack = godata.NewGoPackage("main")
@@ -233,8 +232,7 @@ func createTestPackage() *godata.GoPackage {
 		"package main\n" +
 			"\nimport \"testing\"\n" +
 			"import __regexp__ \"regexp\"\n" +
-			"import \"fmt\"\n" +
-			"import \"os\"\n"
+			"import \"fmt\"\n"
 
 	// will create an array per package with all the Test* and Benchmark* functions
 	// tests/benchmarks will be done for each package seperatly so that running
@@ -284,12 +282,6 @@ func createTestPackage() *godata.GoPackage {
 					"\ttesting.Main(__regexp__.MatchString, test_" + localPackVarName + ");\n"
 			testArrays += tmpStr
 
-			if !flagsDeleted {
-				// this is needed because testing.Main calls flags.Parse
-				// which collides with previous calls to that function
-				testCalls += "\tos.Args = []string{}\n"
-				flagsDeleted = true
-			}
 		}
 
 		fnCount = 0
