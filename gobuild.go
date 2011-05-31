@@ -55,10 +55,10 @@ var goPackages *godata.GoPackageContainer
 // ========== goFileVisitor ==========
 
 // this visitor looks for files with the extension .go
-type goFileVisitor struct{
+type goFileVisitor struct {
 	rootpath string
 	realpath string
-	symname string
+	symname  string
 }
 
 
@@ -85,7 +85,7 @@ func (v *goFileVisitor) VisitFile(filepath string, d *os.FileInfo) {
 			readFiles(filepath)
 		}
 	} else {
-		logger.Warn("%s\n", err);
+		logger.Warn("%s\n", err)
 	}
 
 	// run .y files through goyacc first to create .go files
@@ -99,9 +99,9 @@ func (v *goFileVisitor) VisitFile(filepath string, d *os.FileInfo) {
 			return
 		}
 		cwd, _ := os.Getwd()
-// 		fmt.Println(path.Join(cwd, *flagIgnore), filepath)
+		// 		fmt.Println(path.Join(cwd, *flagIgnore), filepath)
 		if filepath == path.Join(cwd, *flagIgnore) {
-		    return
+			return
 		}
 
 		var gf godata.GoFile
@@ -111,7 +111,7 @@ func (v *goFileVisitor) VisitFile(filepath string, d *os.FileInfo) {
 			}
 		} else {
 			gf = godata.GoFile{filepath[len(v.realpath)+1 : len(filepath)], nil,
-				false,false, strings.HasSuffix(filepath, "_test.go"), nil, nil,
+				false, false, strings.HasSuffix(filepath, "_test.go"), nil, nil,
 			}
 		}
 
@@ -182,7 +182,7 @@ func readFiles(rootpath string) {
 	path.Walk(visitor.realpath, visitor, errorChannel)
 
 	select {
-	case err := <- errorChannel:
+	case err := <-errorChannel:
 		logger.Error("Error while traversing directories: %s\n", err)
 	default:
 	}
@@ -248,7 +248,8 @@ func createTestPackage() *godata.GoPackage {
 			if rune == '/' {
 				return '_'
 			}
-			return rune;}, pack.Name)
+			return rune
+		},pack.Name)
 		// localPackName: package name without path/parent directories
 		var localPackName string
 		if strings.LastIndex(pack.Name, "/") >= 0 {
@@ -317,7 +318,7 @@ func createTestPackage() *godata.GoPackage {
 			benchCalls +
 			"}\n"
 
-	testFile, err = os.Open(testGoFile.Filename, os.O_CREAT|os.O_WRONLY|os.O_TRUNC, 0666)
+	testFile, err = os.Create(testGoFile.Filename)
 	if err != nil {
 		logger.Error("Could not create %s: %s\n", testGoFile.Filename, err)
 		os.Exit(1)
@@ -429,9 +430,9 @@ func compile(pack *godata.GoPackage) bool {
 	if pack.NeedsLocalSearchPath() || objDir != "" {
 		argc += 2
 	}
-    if pack.Name == "main" {
-        argc += 2
-    }
+	if pack.Name == "main" {
+		argc += 2
+	}
 	argv = make([]string, argc*2)
 
 	argv[argvFilled] = compilerBin
@@ -449,11 +450,11 @@ func compile(pack *godata.GoPackage) bool {
 			argvFilled++
 		}
 	}
-// 	for _, arg := range argv {
-// 		logger.Info(arg)
-// 		logger.Info(" ")
-// 	}
-// 	logger.Info("\n")
+	// 	for _, arg := range argv {
+	// 		logger.Info(arg)
+	// 		logger.Info(" ")
+	// 	}
+	// 	logger.Info("\n")
 
 	if pack.NeedsLocalSearchPath() || objDir != "" {
 		argv[argvFilled] = "-I"
@@ -465,12 +466,12 @@ func compile(pack *godata.GoPackage) bool {
 		}
 		argvFilled++
 	}
-    if pack.Name == "main" {
-        argv[argvFilled] = "-I"
-        argvFilled++
-        argv[argvFilled] = "."
-        argvFilled++
-    }
+	if pack.Name == "main" {
+		argv[argvFilled] = "-I"
+		argvFilled++
+		argv[argvFilled] = "."
+		argvFilled++
+	}
 
 	for i := 0; i < pack.Files.Len(); i++ {
 		gf := pack.Files.At(i).(*godata.GoFile)
@@ -522,9 +523,9 @@ func link(pack *godata.GoPackage) bool {
 	if pack.NeedsLocalSearchPath() {
 		argc += 2
 	}
-    if pack.Name == "main" {
-        argc += 2
-    }
+	if pack.Name == "main" {
+		argc += 2
+	}
 
 	argv = make([]string, argc*3)
 
@@ -535,29 +536,29 @@ func link(pack *godata.GoPackage) bool {
 	argv[argvFilled] = outputDirPrefix + pack.OutputFile
 	argvFilled++
 	if *flagIncludePaths != "" {
-        for _, v := range strings.Split(*flagIncludePaths, ",", -1) {
-            argv[argvFilled] = "-L"
-            argvFilled++
-            argv[argvFilled] = v
-            argvFilled++
-        }
+		for _, v := range strings.Split(*flagIncludePaths, ",", -1) {
+			argv[argvFilled] = "-L"
+			argvFilled++
+			argv[argvFilled] = v
+			argvFilled++
+		}
 	}
-// 	if pack.NeedsLocalSearchPath() {
-// 		argv[argvFilled] = "-L"
-// 		argvFilled++
-// 		if objDir != "" {
-// 			argv[argvFilled] = objDir
-// 		} else {
-// 			argv[argvFilled] = "."
-// 		}
-// 		argvFilled++
-// 	}
-     if pack.Name == "main" {
-         argv[argvFilled] = "-L"
-         argvFilled++
-         argv[argvFilled] = "."
-         argvFilled++
-     }
+	// 	if pack.NeedsLocalSearchPath() {
+	// 		argv[argvFilled] = "-L"
+	// 		argvFilled++
+	// 		if objDir != "" {
+	// 			argv[argvFilled] = objDir
+	// 		} else {
+	// 			argv[argvFilled] = "."
+	// 		}
+	// 		argvFilled++
+	// 	}
+	if pack.Name == "main" {
+		argv[argvFilled] = "-L"
+		argvFilled++
+		argv[argvFilled] = "."
+		argvFilled++
+	}
 	argv[argvFilled] = objDir + pack.OutputFile + objExt
 	argvFilled++
 
@@ -592,7 +593,7 @@ func goyacc(filepath string) string {
 	var outFilepath string
 	l_idx := strings.LastIndex(filepath, "/")
 	if l_idx >= 0 {
-		outFilepath = filepath[0:l_idx + 1] +
+		outFilepath = filepath[0:l_idx+1] +
 			"_" + filepath[l_idx+1:len(filepath)-1] + "go"
 	} else {
 		outFilepath = "_" + filepath[0:len(filepath)-1] + "go"
@@ -621,7 +622,7 @@ func goyacc(filepath string) string {
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		os.Exit(waitmsg.ExitStatus());
+		os.Exit(waitmsg.ExitStatus())
 	}
 
 	return outFilepath
@@ -631,7 +632,7 @@ func goyacc(filepath string) string {
  Executes something. Used for the -run command line option.
 */
 func runExec(argv []string) {
-	logger.Info("Executing %s:\n", argv[0]);
+	logger.Info("Executing %s:\n", argv[0])
 	logger.Debug("%s\n", getCommandline(argv))
 	cmd, err := exec.Run(argv[0], argv, os.Environ(), rootPath,
 		exec.PassThrough, exec.PassThrough, exec.PassThrough)
@@ -646,7 +647,7 @@ func runExec(argv []string) {
 	}
 
 	if waitmsg.ExitStatus() != 0 {
-		os.Exit(waitmsg.ExitStatus());
+		os.Exit(waitmsg.ExitStatus())
 	}
 }
 
@@ -813,7 +814,6 @@ func buildLibrary() {
 		packNames = goPackages.GetPackageNames()
 	}
 
-
 	// loop over all packages, compile them and build a .a file
 	for _, name := range packNames {
 
@@ -868,7 +868,7 @@ func buildTestExecutable() {
 	}
 
 	// delete temporary _testmain.go file
-// 	os.Remove("_testmain.go")
+	// 	os.Remove("_testmain.go")
 
 	if compileErrors || linkErrors {
 		return
@@ -890,13 +890,13 @@ func buildTestExecutable() {
 		argv[argvFilled] = outputDirPrefix + testPack.OutputFile
 		argvFilled++
 		if *flagMatch != "" {
-		        argv[argvFilled] = "-match"
+			argv[argvFilled] = "-match"
 			argvFilled++
 			argv[argvFilled] = *flagMatch
 			argvFilled++
 		}
 		if *flagBenchmarks != "" {
-		        argv[argvFilled] = "-benchmarks"
+			argv[argvFilled] = "-benchmarks"
 			argvFilled++
 			argv[argvFilled] = *flagBenchmarks
 			argvFilled++
@@ -980,9 +980,9 @@ func main() {
 	}
 
 	// get the compiler/linker executable
-	var goarch string;
+	var goarch string
 	goarch = os.Getenv("GOARCH")
-	if (goarch == "") {
+	if goarch == "" {
 		goarch = runtime.GOARCH
 	}
 	switch goarch {
