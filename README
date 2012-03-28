@@ -1,3 +1,6 @@
+This project is now obsolete. Hurray! Go release 1, (tagged as go1 in hg), 
+makes this project irrelevant with the new `go` command
+
 Description
 ------------
 gobuild is an automatic build tool that aims to replace Makefiles for simple
